@@ -18,6 +18,8 @@ export type ApprovedPrototypeRider = {
   phone?: string;
   ownedBikeName?: string;
   passengerSetup?: string;
+  profilePhotoUrl?: string;
+  bikePhotoUrls?: { name: string; url: string }[];
 };
 
 type RiderGarage = {
@@ -28,6 +30,8 @@ type RiderGarage = {
   model?: string;
   passengerSetup?: string;
   comfortNotes?: string;
+  profilePhotoUrl?: string;
+  bikePhotoUrls?: { name: string; url: string }[];
 };
 
 type RiderApplicationWithBike = RiderApplication & {
@@ -60,12 +64,8 @@ function findBestInventoryMatch(searchText: string) {
     const modelWords = normalize(bike.model).split(" ").filter(Boolean);
     let score = 0;
 
-    for (const word of makeWords) {
-      if (normalizedSearch.includes(word)) score += 2;
-    }
-    for (const word of modelWords) {
-      if (normalizedSearch.includes(word)) score += 4;
-    }
+    for (const word of makeWords) if (normalizedSearch.includes(word)) score += 2;
+    for (const word of modelWords) if (normalizedSearch.includes(word)) score += 4;
     if (normalizedSearch.includes(normalize(`${bike.make} ${bike.model}`))) score += 10;
 
     return { bike, score };
@@ -76,13 +76,11 @@ function findBestInventoryMatch(searchText: string) {
 
 function inferBikeId(application: RiderApplication, garage?: RiderGarage | null) {
   const app = application as RiderApplicationWithBike;
-
   if (app.selectedInventoryBikeId) return app.selectedInventoryBikeId;
 
   const garageText = `${garage?.year || ""} ${garage?.make || ""} ${garage?.model || ""}`;
   const garageMatch = findBestInventoryMatch(garageText);
   if (garageMatch) return garageMatch.id;
-
   if (garage?.selectedInventoryBikeId) return garage.selectedInventoryBikeId;
 
   const applicationMatch = findBestInventoryMatch(application.motorcycle || "");
@@ -123,7 +121,9 @@ export function buildApprovedRiderFromApplication(application: RiderApplication,
     email: application.email,
     phone: application.phone,
     ownedBikeName: displayBike,
-    passengerSetup: setup
+    passengerSetup: setup,
+    profilePhotoUrl: garage?.profilePhotoUrl || "",
+    bikePhotoUrls: garage?.bikePhotoUrls || []
   };
 }
 
