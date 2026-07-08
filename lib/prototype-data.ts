@@ -92,6 +92,60 @@ export type RiderApplication = {
   insurance: string;
   motorcycle: string;
   availability: string;
+  idDocumentName: string;
+  idExpirationDate: string;
+  insuranceDocumentName: string;
+  insuranceExpirationDate: string;
+  documentExtractionMode: string;
+  accessStatus: string;
   status: string;
   createdAt: string;
 };
+
+export function daysUntil(dateValue: string) {
+  if (!dateValue) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const expires = new Date(`${dateValue}T00:00:00`);
+  if (Number.isNaN(expires.getTime())) return null;
+  const difference = expires.getTime() - today.getTime();
+  return Math.ceil(difference / (1000 * 60 * 60 * 24));
+}
+
+export function getDocumentStatus(application: RiderApplication) {
+  const idDays = daysUntil(application.idExpirationDate);
+  const insuranceDays = daysUntil(application.insuranceExpirationDate);
+  const missingDocuments = !application.idDocumentName || !application.insuranceDocumentName || !application.idExpirationDate || !application.insuranceExpirationDate;
+  const expired = idDays !== null && idDays < 0 || insuranceDays !== null && insuranceDays < 0;
+  const expiringSoon = idDays !== null && idDays <= 30 && idDays >= 0 || insuranceDays !== null && insuranceDays <= 30 && insuranceDays >= 0;
+
+  if (missingDocuments) {
+    return {
+      label: "Access revoked - missing document data",
+      tone: "danger",
+      adminNotice: "Rider access should stay revoked until ID and insurance images plus expiration dates are on file."
+    };
+  }
+
+  if (expired) {
+    return {
+      label: "Access revoked - document expired",
+      tone: "danger",
+      adminNotice: "One or more compliance documents are expired. Rider access is revoked until renewed documents are uploaded."
+    };
+  }
+
+  if (expiringSoon) {
+    return {
+      label: "30-day renewal warning",
+      tone: "warning",
+      adminNotice: "Notify admin and rider now. Renewed ID or insurance needs to be uploaded before expiration."
+    };
+  }
+
+  return {
+    label: "Documents current",
+    tone: "ok",
+    adminNotice: "ID and insurance are current."
+  };
+}
