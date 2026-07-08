@@ -1,0 +1,15 @@
+{
+  "name": "rr-revolution",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @rr/web",
+    "build": "npm run build --workspace @rr/web",
+    "start": "npm run start --workspace @rr/web",
+    "lint": "npm run lint --workspace @rr/web",
+    "typecheck": "npm run typecheck --workspace @rr/web"
+  }
+}
