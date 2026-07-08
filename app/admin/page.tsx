@@ -5,7 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { PrototypeNav } from "../../components/prototype-nav";
 import { MockRouteMap } from "../../components/mock-route-map";
 import { AdminOpsMap } from "../../components/admin-ops-map";
-import { getDocumentStatus, type RideRequest, type RiderApplication } from "../../lib/prototype-data";
+import { getBikeById, getDocumentStatus, type RideRequest, type RiderApplication } from "../../lib/prototype-data";
+import { approvePrototypeRider, getStoredApprovedRiders, revokePrototypeRider, type ApprovedPrototypeRider } from "../../lib/prototype-rider-marketplace";
 
 function updateStoredList<T>(key: string, list: T[]) {
   localStorage.setItem(key, JSON.stringify(list));
@@ -30,10 +31,12 @@ function isPendingRequest(request: RideRequest) {
 export default function AdminPage() {
   const [requests, setRequests] = useState<RideRequest[]>([]);
   const [applications, setApplications] = useState<RiderApplication[]>([]);
+  const [approvedRiders, setApprovedRiders] = useState<ApprovedPrototypeRider[]>([]);
 
   useEffect(() => {
     setRequests(JSON.parse(localStorage.getItem("rr_ride_requests") || "[]"));
     setApplications(JSON.parse(localStorage.getItem("rr_rider_applications") || "[]"));
+    setApprovedRiders(getStoredApprovedRiders());
   }, []);
 
   const complianceAlerts = useMemo(() => applications.filter((application) => getDocumentStatus(application).tone !== "ok"), [applications]);
@@ -41,6 +44,7 @@ export default function AdminPage() {
   const pendingRequests = useMemo(() => requests.filter(isPendingRequest), [requests]);
   const acceptedRequests = useMemo(() => requests.filter((request) => request.status.toLowerCase().includes("accepted")), [requests]);
   const uniqueAssignedRiders = useMemo(() => new Set(activeRoutes.map((request) => request.selectedRiderName || request.status).filter(Boolean)).size, [activeRoutes]);
+  const activeApprovedRiders = useMemo(() => approvedRiders.filter((rider) => rider.status === "Approved" && rider.accessStatus === "Active"), [approvedRiders]);
 
   function setRequestStatus(index: number, status: string) {
     const next = requests.map((item, itemIndex) => itemIndex === index ? { ...item, status } : item);
@@ -54,11 +58,31 @@ export default function AdminPage() {
     updateStoredList("rr_rider_applications", next);
   }
 
+  function approveApplication(index: number) {
+    const application = applications[index];
+    const approved = approvePrototypeRider(application);
+    setApplicationStatus(index, "Approved rider", "Active");
+    setApprovedRiders(getStoredApprovedRiders());
+    alert(`${approved.name} is now active and will appear in the passenger request flow for ${approved.bikeIds.map((bikeId) => getBikeById(bikeId).model).join(", ")}.`);
+  }
+
+  function revokeApplication(index: number) {
+    const application = applications[index];
+    revokePrototypeRider(application);
+    setApplicationStatus(index, "Revoked by admin", "Access revoked");
+    setApprovedRiders(getStoredApprovedRiders());
+    const nextRequests = requests.map((request) => request.selectedRiderName === application.riderName ? { ...request, status: "Rider access revoked - admin reassignment needed" } : request);
+    setRequests(nextRequests);
+    updateStoredList("rr_ride_requests", nextRequests);
+  }
+
   function clearPrototypeData() {
     localStorage.removeItem("rr_ride_requests");
     localStorage.removeItem("rr_rider_applications");
+    localStorage.removeItem("rr_approved_riders");
     setRequests([]);
     setApplications([]);
+    setApprovedRiders([]);
   }
 
   return (
@@ -67,27 +91,36 @@ export default function AdminPage() {
       <section className="mx-auto max-w-7xl px-6 py-12">
         <div className="text-xs uppercase tracking-[0.42em] text-rr-purple">Admin live operations</div>
         <h1 className="rr-metal-text mt-3 text-5xl font-black">Dispatch and approval dashboard</h1>
-        <p className="mt-4 max-w-3xl text-rr-chrome">Monitor active riders, active routes, pending ride requests, passenger releases, rider applications, and compliance alerts. The operations map is built as a realtime-ready layer that can be wired into live GPS later.</p>
+        <p className="mt-4 max-w-3xl text-rr-chrome">Monitor active riders, active routes, pending ride requests, passenger releases, rider applications, and compliance alerts. Approved riders now feed the passenger request flow.</p>
 
         <div className="mt-8 grid gap-4 md:grid-cols-4 xl:grid-cols-6">
           <div className="rr-card rounded-3xl p-6"><div className="text-sm text-rr-chrome">All ride requests</div><div className="mt-2 text-4xl font-black">{requests.length}</div></div>
           <div className="rr-card rounded-3xl p-6"><div className="text-sm text-rr-chrome">Pending requests</div><div className="mt-2 text-4xl font-black">{pendingRequests.length}</div></div>
           <div className="rr-card rounded-3xl p-6"><div className="text-sm text-rr-chrome">Accepted rides</div><div className="mt-2 text-4xl font-black">{acceptedRequests.length}</div></div>
           <div className="rr-card rounded-3xl p-6"><div className="text-sm text-rr-chrome">Active routes</div><div className="mt-2 text-4xl font-black">{activeRoutes.length}</div></div>
-          <div className="rr-card rounded-3xl p-6"><div className="text-sm text-rr-chrome">Riders out</div><div className="mt-2 text-4xl font-black">{uniqueAssignedRiders}</div></div>
+          <div className="rr-card rounded-3xl p-6"><div className="text-sm text-rr-chrome">Active approved riders</div><div className="mt-2 text-4xl font-black">{activeApprovedRiders.length}</div></div>
           <button onClick={clearPrototypeData} className="rr-card rounded-3xl p-6 text-left text-rr-silver hover:border-rr-purple/60">Clear prototype data</button>
         </div>
+
+        <section className="mt-10 rounded-[2rem] border border-rr-purple/30 bg-rr-purple/5 p-6">
+          <div className="text-xs uppercase tracking-[0.34em] text-rr-purple">Admin process flow</div>
+          <h2 className="mt-2 text-2xl font-black">Approval → marketplace → request → dispatch</h2>
+          <div className="mt-4 grid gap-3 text-sm text-rr-silver md:grid-cols-4">
+            <div className="rounded-2xl border border-white/10 bg-black/30 p-4"><strong className="text-white">1. Review rider</strong><br />Check application, documents, and garage bike.</div>
+            <div className="rounded-2xl border border-white/10 bg-black/30 p-4"><strong className="text-white">2. Approve</strong><br />Rider is added to active marketplace matching for their selected bike.</div>
+            <div className="rounded-2xl border border-white/10 bg-black/30 p-4"><strong className="text-white">3. Passenger requests</strong><br />Passenger chooses that bike and sees the approved rider.</div>
+            <div className="rounded-2xl border border-white/10 bg-black/30 p-4"><strong className="text-white">4. Revoke if needed</strong><br />Rider disappears from future requests and active requests require reassignment.</div>
+          </div>
+        </section>
 
         <AdminOpsMap requests={requests} />
 
         <section className="mt-10 rounded-[2rem] border border-rr-purple/30 bg-rr-purple/5 p-6">
-          <div className="text-xs uppercase tracking-[0.34em] text-rr-purple">Wire-in plan</div>
-          <h2 className="mt-2 text-2xl font-black">How this becomes fully live later</h2>
-          <div className="mt-4 grid gap-3 text-sm text-rr-silver md:grid-cols-2">
-            <div className="rounded-2xl border border-white/10 bg-black/30 p-4"><strong className="text-white">Rider location pings</strong><br />Mobile app sends rider latitude/longitude every few seconds while online or in an active ride.</div>
-            <div className="rounded-2xl border border-white/10 bg-black/30 p-4"><strong className="text-white">Realtime subscription</strong><br />Admin dashboard subscribes to ride status and rider location changes through Supabase realtime, WebSockets, or Firebase.</div>
-            <div className="rounded-2xl border border-white/10 bg-black/30 p-4"><strong className="text-white">Mapbox layer</strong><br />Replace the SVG mock map with Mapbox GL markers, route polylines, geofences, pickup/drop-off pins, and rider trail history.</div>
-            <div className="rounded-2xl border border-white/10 bg-black/30 p-4"><strong className="text-white">Dispatch controls</strong><br />Admin can reassign riders, pause a ride, contact rider/passenger, mark incidents, and force status changes when needed.</div>
+          <div className="text-xs uppercase tracking-[0.34em] text-rr-purple">Approved rider marketplace</div>
+          <h2 className="mt-2 text-2xl font-black">Riders visible to passengers</h2>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {approvedRiders.length === 0 ? <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-rr-chrome">No newly approved prototype riders yet. Approve a rider application below to publish them into the request flow.</div> : null}
+            {approvedRiders.map((rider) => <div key={rider.id} className="rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-rr-silver"><strong className="text-white">{rider.name}</strong><br />Status: {rider.status} · Access: {rider.accessStatus}<br />Bike: {rider.bikeIds.map((bikeId) => `${getBikeById(bikeId).make} ${getBikeById(bikeId).model}`).join(", ")}</div>)}
           </div>
         </section>
 
@@ -115,22 +148,9 @@ export default function AdminPage() {
               <p className="mt-2 text-sm text-rr-silver">Requested rider: {request.selectedRiderName || "Any approved rider"}</p>
               <p className="mt-2 text-sm text-rr-silver">{request.date} at {request.time} · {request.duration}</p>
               <p className="mt-2 text-sm text-rr-silver">Phone: {request.phone} · Emergency contact: {request.emergencyContact}</p>
-              <div className="mt-4 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-                <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-rr-silver">
-                  <strong className="text-white">Route details:</strong><br />
-                  Pickup: {request.pickupLocation || "Not captured"}<br />
-                  Drop-off: {request.dropoffLocation || "Not captured"}<br />
-                  Preference: {request.routePreference || "Not captured"}<br />
-                  Estimate: {request.estimatedDistance || "Pending"} · {request.estimatedRideTime || "Pending"}<br />
-                  Rider notes: {request.riderNotes || "None"}
-                </div>
-                <MockRouteMap pickup={request.pickupLocation} dropoff={request.dropoffLocation} compact />
-              </div>
-              <div className="mt-4 rounded-2xl border border-rr-purple/30 bg-rr-purple/5 p-4 text-sm text-rr-silver">
-                <strong className="text-white">Passenger release:</strong><br />
-                {request.passengerRelease ? <>Signed by {request.passengerRelease.electronicSignature} · Initials {request.passengerRelease.initials}<br />DOB: {request.passengerRelease.dateOfBirth} · Signed: {new Date(request.passengerRelease.signedAt).toLocaleString()}<br />Media consent: {request.passengerRelease.mediaConsent}<br />Version: {request.passengerRelease.releaseVersion}</> : "No passenger release found for this request."}
-              </div>
-              <div className="mt-5 flex flex-wrap gap-2"><button onClick={() => setRequestStatus(index, "Accepted by rider")} className="rounded-full bg-rr-purple px-4 py-2 text-sm">Accept</button><button onClick={() => setRequestStatus(index, "En route to pickup")} className="rounded-full border border-white/10 px-4 py-2 text-sm text-rr-silver">En route</button><button onClick={() => setRequestStatus(index, "Passenger onboard")} className="rounded-full border border-white/10 px-4 py-2 text-sm text-rr-silver">Onboard</button><button onClick={() => setRequestStatus(index, "Needs passenger follow-up")} className="rounded-full border border-white/10 px-4 py-2 text-sm text-rr-silver">Follow up</button><button onClick={() => setRequestStatus(index, "Declined for safety/review")} className="rounded-full border border-white/10 px-4 py-2 text-sm text-rr-silver">Decline</button></div>
+              <div className="mt-4 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]"><div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-rr-silver"><strong className="text-white">Route details:</strong><br />Pickup: {request.pickupLocation || "Not captured"}<br />Drop-off: {request.dropoffLocation || "Not captured"}<br />Preference: {request.routePreference || "Not captured"}<br />Estimate: {request.estimatedDistance || "Pending"} · {request.estimatedRideTime || "Pending"}<br />Rider notes: {request.riderNotes || "None"}</div><MockRouteMap pickup={request.pickupLocation} dropoff={request.dropoffLocation} compact /></div>
+              <div className="mt-4 rounded-2xl border border-rr-purple/30 bg-rr-purple/5 p-4 text-sm text-rr-silver"><strong className="text-white">Passenger release:</strong><br />{request.passengerRelease ? <>Signed by {request.passengerRelease.electronicSignature} · Initials {request.passengerRelease.initials}<br />DOB: {request.passengerRelease.dateOfBirth} · Signed: {new Date(request.passengerRelease.signedAt).toLocaleString()}<br />Media consent: {request.passengerRelease.mediaConsent}<br />Version: {request.passengerRelease.releaseVersion}</> : "No passenger release found for this request."}</div>
+              <div className="mt-5 flex flex-wrap gap-2"><button onClick={() => setRequestStatus(index, "Admin approved - sent to rider")} className="rounded-full bg-rr-purple px-4 py-2 text-sm">Admin approve</button><button onClick={() => setRequestStatus(index, "Accepted by rider")} className="rounded-full border border-white/10 px-4 py-2 text-sm text-rr-silver">Rider accepted</button><button onClick={() => setRequestStatus(index, "En route to pickup")} className="rounded-full border border-white/10 px-4 py-2 text-sm text-rr-silver">En route</button><button onClick={() => setRequestStatus(index, "Passenger onboard")} className="rounded-full border border-white/10 px-4 py-2 text-sm text-rr-silver">Onboard</button><button onClick={() => setRequestStatus(index, "Completed")} className="rounded-full border border-white/10 px-4 py-2 text-sm text-rr-silver">Complete</button><button onClick={() => setRequestStatus(index, "Declined for safety/review")} className="rounded-full border border-white/10 px-4 py-2 text-sm text-rr-silver">Decline</button></div>
             </article>
           ))}
         </div>
@@ -150,12 +170,9 @@ export default function AdminPage() {
                 <p className="mt-2 text-sm text-rr-silver">{application.motorcycle}</p>
                 <p className="mt-2 text-sm text-rr-silver">Availability: {application.availability}</p>
                 <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-rr-silver"><strong className="text-white">Motorcycle photos:</strong><br />{motorcyclePhotoNames.length > 0 ? motorcyclePhotoNames.join(", ") : "No bike photos uploaded"}</div>
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-rr-silver">ID file: {application.idDocumentName || "Missing"}<br />ID expires: {application.idExpirationDate || "Missing"}</div>
-                  <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-rr-silver">Insurance file: {application.insuranceDocumentName || "Missing"}<br />Insurance expires: {application.insuranceExpirationDate || "Missing"}</div>
-                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-2"><div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-rr-silver">ID file: {application.idDocumentName || "Missing"}<br />ID expires: {application.idExpirationDate || "Missing"}</div><div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-rr-silver">Insurance file: {application.insuranceDocumentName || "Missing"}<br />Insurance expires: {application.insuranceExpirationDate || "Missing"}</div></div>
                 <div className={`mt-4 rounded-2xl border p-4 text-sm ${statusClass(documentStatus.tone)}`}><strong>{documentStatus.label}</strong><br />{documentStatus.adminNotice}<br />Effective access: {effectiveAccess}</div>
-                <div className="mt-5 flex flex-wrap gap-2"><button onClick={() => setApplicationStatus(index, "Approved rider", "Active")} className="rounded-full bg-rr-purple px-4 py-2 text-sm">Approve</button><button onClick={() => setApplicationStatus(index, "Needs document review", "Restricted pending documents")} className="rounded-full border border-white/10 px-4 py-2 text-sm text-rr-silver">Needs docs</button><button onClick={() => setApplicationStatus(index, "Declined by admin", "Access revoked")} className="rounded-full border border-white/10 px-4 py-2 text-sm text-rr-silver">Revoke</button></div>
+                <div className="mt-5 flex flex-wrap gap-2"><button onClick={() => approveApplication(index)} className="rounded-full bg-rr-purple px-4 py-2 text-sm">Approve + publish</button><button onClick={() => setApplicationStatus(index, "Needs document review", "Restricted pending documents")} className="rounded-full border border-white/10 px-4 py-2 text-sm text-rr-silver">Needs docs</button><button onClick={() => revokeApplication(index)} className="rounded-full border border-white/10 px-4 py-2 text-sm text-rr-silver">Revoke access</button></div>
               </article>
             );
           })}
