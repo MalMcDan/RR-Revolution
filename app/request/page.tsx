@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PrototypeNav } from "../../components/prototype-nav";
 import { MockRouteMap } from "../../components/mock-route-map";
-import { estimateRoute, experiences, motorcycles, type PassengerRelease, type RideRequest } from "../../lib/prototype-data";
+import { estimateRoute, experiences, getBikeById, getRidersForBike, motorcycleInventory, riderProfiles, type PassengerRelease, type RideRequest } from "../../lib/prototype-data";
 
 const inputClass = "mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-white outline-none focus:border-rr-purple";
 const labelClass = "text-sm font-medium text-rr-silver";
@@ -15,7 +15,16 @@ export default function RequestPage() {
   const [error, setError] = useState("");
   const [pickupPreview, setPickupPreview] = useState("Downtown Norfolk, VA");
   const [dropoffPreview, setDropoffPreview] = useState("Virginia Beach Oceanfront");
+  const [selectedBikeId, setSelectedBikeId] = useState(motorcycleInventory[0].id);
+  const matchedRiders = useMemo(() => getRidersForBike(selectedBikeId), [selectedBikeId]);
+  const [selectedRiderId, setSelectedRiderId] = useState(matchedRiders[0]?.id || riderProfiles[0].id);
   const router = useRouter();
+
+  function chooseBike(bikeId: string) {
+    setSelectedBikeId(bikeId);
+    const firstMatchedRider = getRidersForBike(bikeId)[0];
+    if (firstMatchedRider) setSelectedRiderId(firstMatchedRider.id);
+  }
 
   function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -29,7 +38,16 @@ export default function RequestPage() {
     const pickupLocation = String(form.get("pickupLocation") || "");
     const dropoffLocation = String(form.get("dropoffLocation") || "");
     const duration = String(form.get("duration") || "");
+    const bikeId = String(form.get("selectedBikeId") || selectedBikeId);
+    const riderId = String(form.get("selectedRiderId") || selectedRiderId);
+    const selectedBike = getBikeById(bikeId);
+    const selectedRider = riderProfiles.find((rider) => rider.id === riderId);
     const routeEstimate = estimateRoute(pickupLocation, dropoffLocation, duration);
+
+    if (!selectedRider) {
+      setError("Please choose an approved rider for the selected bike.");
+      return;
+    }
 
     if (!safetyAccepted || missingReleaseCheck) {
       setError("All required safety and legal release acknowledgments must be checked before submitting a ride request.");
@@ -57,6 +75,7 @@ export default function RequestPage() {
       releaseVersion: "RR passenger release prototype v0.1 - attorney review required"
     };
 
+    const selectedBikeName = `${selectedBike.year} ${selectedBike.make} ${selectedBike.model}`;
     const request: RideRequest = {
       passengerName,
       phone: String(form.get("phone") || ""),
@@ -67,14 +86,18 @@ export default function RequestPage() {
       riderNotes: String(form.get("riderNotes") || ""),
       estimatedDistance: routeEstimate.estimatedDistance,
       estimatedRideTime: routeEstimate.estimatedRideTime,
+      selectedBikeId: selectedBike.id,
+      selectedBikeName,
+      selectedRiderId: selectedRider.id,
+      selectedRiderName: selectedRider.name,
       experience: String(form.get("experience") || ""),
-      motorcycle: String(form.get("motorcycle") || ""),
+      motorcycle: selectedBikeName,
       date: String(form.get("date") || ""),
       time: String(form.get("time") || ""),
       duration,
       safetyAccepted,
       passengerRelease,
-      status: "Submitted for rider review",
+      status: `Submitted to ${selectedRider.name} for review`,
       createdAt: new Date().toISOString()
     };
     const existing = JSON.parse(localStorage.getItem("rr_ride_requests") || "[]");
@@ -82,13 +105,15 @@ export default function RequestPage() {
     router.push("/confirmation");
   }
 
+  const selectedBike = getBikeById(selectedBikeId);
+
   return (
     <main className="min-h-screen bg-rr-radial text-white">
       <PrototypeNav />
       <section className="mx-auto max-w-6xl px-6 py-12">
         <div className="text-xs uppercase tracking-[0.42em] text-rr-purple">Passenger flow</div>
         <h1 className="rr-metal-text mt-3 text-5xl font-black">Request a scheduled ride</h1>
-        <p className="mt-4 max-w-3xl text-rr-chrome">Choose pickup and drop-off points, preview the route layer, sign the passenger release, and submit the request for rider review.</p>
+        <p className="mt-4 max-w-3xl text-rr-chrome">Choose pickup and drop-off points, choose a real motorcycle model, select an approved rider matched to that bike, sign the release, and submit the request.</p>
 
         {error ? <div className="mt-6 rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-red-100">{error}</div> : null}
 
@@ -115,9 +140,52 @@ export default function RequestPage() {
               </div>
             </section>
 
+            <section className="rounded-[1.5rem] border border-white/10 bg-black/20 p-5">
+              <div className="text-xs uppercase tracking-[0.32em] text-rr-purple">Step 1</div>
+              <h2 className="mt-2 text-2xl font-black">Choose a motorcycle</h2>
+              <p className="mt-2 text-sm leading-6 text-rr-chrome">These are real motorcycle models pulled into the prototype from vendor pages. Official product photos should be wired through licensed/source-approved image storage before launch.</p>
+              <input type="hidden" name="selectedBikeId" value={selectedBikeId} />
+              <div className="mt-5 grid gap-4">
+                {motorcycleInventory.map((bike) => {
+                  const checked = selectedBikeId === bike.id;
+                  return (
+                    <button key={bike.id} type="button" onClick={() => chooseBike(bike.id)} className={`rounded-3xl border p-0 text-left transition ${checked ? "border-rr-purple bg-rr-purple/10 shadow-glow" : "border-white/10 bg-black/20 hover:border-rr-purple/50"}`}>
+                      <div className={`h-28 rounded-t-3xl bg-gradient-to-br ${bike.visualTheme}`} />
+                      <div className="p-5">
+                        <div className="text-xs uppercase tracking-[0.28em] text-rr-purple">{bike.category}</div>
+                        <h3 className="mt-2 text-xl font-black">{bike.year} {bike.make} {bike.model}</h3>
+                        <p className="mt-2 text-sm text-rr-chrome">{bike.passengerFit}</p>
+                        <div className="mt-3 flex flex-wrap gap-2 text-xs text-rr-silver">{bike.comfortTags.map((tag) => <span key={tag} className="rounded-full border border-white/10 px-3 py-1">{tag}</span>)}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="rounded-[1.5rem] border border-white/10 bg-black/20 p-5">
+              <div className="text-xs uppercase tracking-[0.32em] text-rr-purple">Step 2</div>
+              <h2 className="mt-2 text-2xl font-black">Choose an approved rider</h2>
+              <p className="mt-2 text-sm leading-6 text-rr-chrome">Only riders approved for the selected {selectedBike.make} {selectedBike.model} are shown.</p>
+              <input type="hidden" name="selectedRiderId" value={selectedRiderId} />
+              <div className="mt-5 grid gap-4">
+                {matchedRiders.map((rider) => {
+                  const checked = selectedRiderId === rider.id;
+                  return (
+                    <button key={rider.id} type="button" onClick={() => setSelectedRiderId(rider.id)} className={`rounded-3xl border p-5 text-left transition ${checked ? "border-rr-purple bg-rr-purple/10 shadow-glow" : "border-white/10 bg-black/20 hover:border-rr-purple/50"}`}>
+                      <div className="text-xs uppercase tracking-[0.25em] text-rr-purple">{rider.status} · {rider.rating} stars · {rider.completedRides} rides</div>
+                      <h3 className="mt-3 text-2xl font-black">{rider.name}</h3>
+                      <p className="mt-2 text-sm text-rr-chrome">{rider.years} · {rider.homeArea}</p>
+                      <p className="mt-2 text-sm text-rr-silver">{rider.bio}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
             <div className="grid gap-5 md:grid-cols-2">
               <label className={labelClass}>Experience<select name="experience" required className={inputClass}>{experiences.map((item) => <option key={item.id}>{item.title}</option>)}</select></label>
-              <label className={labelClass}>Motorcycle<select name="motorcycle" required className={inputClass}>{motorcycles.map((bike) => <option key={bike.id}>{bike.name}</option>)}</select></label>
+              <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-rr-silver"><strong className="text-white">Selected bike:</strong><br />{selectedBike.year} {selectedBike.make} {selectedBike.model}</div>
             </div>
             <div className="grid gap-5 md:grid-cols-3">
               <label className={labelClass}>Date<input type="date" name="date" required className={inputClass} /></label>
@@ -151,7 +219,7 @@ export default function RequestPage() {
               <label className="mt-4 flex gap-3 text-sm text-rr-silver"><input type="checkbox" name="safetyAccepted" className="mt-1" />I understand and accept these requirements.</label>
             </div>
             <div className="flex flex-wrap gap-3">
-              <button className="rounded-full bg-rr-purple px-6 py-3 font-semibold shadow-glow">Submit ride request and signed release</button>
+              <button className="rounded-full bg-rr-purple px-6 py-3 font-semibold shadow-glow">Submit ride request to selected rider</button>
               <Link href="/admin" className="rounded-full border border-white/10 px-6 py-3 text-rr-silver">Open admin</Link>
             </div>
           </div>
@@ -159,9 +227,15 @@ export default function RequestPage() {
           <aside className="space-y-5 lg:sticky lg:top-6 lg:self-start">
             <MockRouteMap pickup={pickupPreview} dropoff={dropoffPreview} />
             <div className="rr-card rounded-[2rem] p-6">
-              <div className="text-xs uppercase tracking-[0.28em] text-rr-purple">Wire-in later</div>
-              <h3 className="mt-2 text-2xl font-black">Mapbox-ready route layer</h3>
-              <p className="mt-3 text-sm leading-6 text-rr-chrome">Later this becomes live address autocomplete, geocoding, route distance, ride duration, map pins, rider navigation, and safety geofence checks.</p>
+              <div className="text-xs uppercase tracking-[0.28em] text-rr-purple">Current selection</div>
+              <h3 className="mt-2 text-2xl font-black">{selectedBike.year} {selectedBike.make} {selectedBike.model}</h3>
+              <p className="mt-3 text-sm leading-6 text-rr-chrome">{selectedBike.passengerFit}</p>
+              <div className="mt-4 flex flex-wrap gap-2 text-xs text-rr-silver">{selectedBike.highlights.map((item) => <span key={item} className="rounded-full border border-white/10 px-3 py-1">{item}</span>)}</div>
+              <a href={selectedBike.vendorUrl} target="_blank" rel="noreferrer" className="mt-5 inline-flex text-sm text-rr-purple">View vendor source →</a>
+            </div>
+            <div className="rr-card rounded-[2rem] p-6">
+              <div className="text-xs uppercase tracking-[0.28em] text-rr-purple">Matched riders</div>
+              <p className="mt-2 text-sm leading-6 text-rr-chrome">{matchedRiders.length} approved rider(s) can fulfill requests for this bike.</p>
             </div>
           </aside>
         </form>
