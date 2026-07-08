@@ -11,24 +11,13 @@ import { motorcycleInventory, type RideRequest } from "../../lib/prototype-data"
 const inputClass = "mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-white outline-none focus:border-rr-purple";
 const labelClass = "text-sm font-medium text-rr-silver";
 
-type RiderSession = {
-  riderName: string;
-  email: string;
-  phone: string;
-  ridingStyle: string;
-  motorcycle: string;
-  availability: string;
-  loginAt: string;
-};
-
-type StoredImage = {
-  name: string;
-  dataUrl: string;
-};
-
+type RiderSession = { riderName: string; email: string; phone: string; ridingStyle: string; motorcycle: string; availability: string; loginAt: string; };
+type StoredImage = { name: string; dataUrl: string; url?: string; };
+type StoredPublicImage = { name: string; url: string; };
 type RiderGarage = {
   profilePhotoName: string;
   profilePhotoDataUrl?: string;
+  profilePhotoUrl?: string;
   selectedInventoryBikeId: string;
   bikeNickname: string;
   year: string;
@@ -38,7 +27,14 @@ type RiderGarage = {
   comfortNotes: string;
   bikePhotoNames: string[];
   bikePhotoDataUrls?: StoredImage[];
+  bikePhotoUrls?: StoredPublicImage[];
   updatedAt: string;
+};
+
+type UploadResponse = {
+  profilePhoto: StoredPublicImage | null;
+  bikePhotos: StoredPublicImage[];
+  error?: string;
 };
 
 function getRequests() {
@@ -59,6 +55,10 @@ function getFileNames(form: FormData, fieldName: string) {
   return form.getAll(fieldName).filter((file): file is File => file instanceof File && Boolean(file.name)).map((file) => file.name);
 }
 
+function getNamedFiles(form: FormData, fieldName: string) {
+  return form.getAll(fieldName).filter((file): file is File => file instanceof File && Boolean(file.name));
+}
+
 function readFileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -75,7 +75,7 @@ async function getImageDataUrl(form: FormData, fieldName: string) {
 }
 
 async function getImageDataUrls(form: FormData, fieldName: string) {
-  const files = form.getAll(fieldName).filter((file): file is File => file instanceof File && Boolean(file.name));
+  const files = getNamedFiles(form, fieldName);
   return Promise.all(files.map(async (file) => ({ name: file.name, dataUrl: await readFileAsDataUrl(file) })));
 }
 
@@ -95,13 +95,26 @@ function saveGarageToLocalStorage(next: RiderGarage) {
   try {
     localStorage.setItem("rr_rider_garage", JSON.stringify(next));
   } catch {
-    const lightweight: RiderGarage = {
-      ...next,
-      profilePhotoDataUrl: "",
-      bikePhotoDataUrls: []
-    };
+    const lightweight: RiderGarage = { ...next, profilePhotoDataUrl: "", bikePhotoDataUrls: [] };
     localStorage.setItem("rr_rider_garage", JSON.stringify(lightweight));
   }
+}
+
+async function uploadGarageAssets(form: FormData, riderName: string): Promise<UploadResponse | null> {
+  const profileFile = form.get("profilePhoto");
+  const bikeFiles = getNamedFiles(form, "bikePhotos");
+  const hasProfileFile = profileFile instanceof File && Boolean(profileFile.name);
+  if (!hasProfileFile && bikeFiles.length === 0) return null;
+
+  const uploadForm = new FormData();
+  uploadForm.set("riderKey", riderName || "rider");
+  if (hasProfileFile && profileFile instanceof File) uploadForm.set("profilePhoto", profileFile);
+  for (const file of bikeFiles) uploadForm.append("bikePhotos", file);
+
+  const response = await fetch("/api/prototype/rider-assets", { method: "POST", body: uploadForm });
+  const payload = await response.json() as UploadResponse;
+  if (!response.ok) throw new Error(payload.error || "Image upload failed");
+  return payload;
 }
 
 export default function RiderDashboardPage() {
@@ -111,6 +124,7 @@ export default function RiderDashboardPage() {
   const [requests, setRequests] = useState<RideRequest[]>([]);
   const [saved, setSaved] = useState(false);
   const [garageSaved, setGarageSaved] = useState(false);
+  const [garageError, setGarageError] = useState("");
   const [garage, setGarage] = useState<RiderGarage | null>(null);
   const [profilePreview, setProfilePreview] = useState<StoredImage | null>(null);
   const [bikePreviews, setBikePreviews] = useState<StoredImage[]>([]);
@@ -182,45 +196,54 @@ export default function RiderDashboardPage() {
 
   async function saveGarage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setGarageError("");
     const form = new FormData(event.currentTarget);
     const selectedInventoryBikeId = String(form.get("selectedInventoryBikeId") || motorcycleInventory[0].id);
     const selectedBike = motorcycleInventory.find((bike) => bike.id === selectedInventoryBikeId) || motorcycleInventory[0];
-    const profilePhotoName = profilePreview?.name || getFileName(form, "profilePhoto") || garage?.profilePhotoName || "";
-    const uploadedBikePhotoNames = bikePreviews.length > 0 ? bikePreviews.map((photo) => photo.name) : getFileNames(form, "bikePhotos");
-    const bikePhotoNames = uploadedBikePhotoNames.length > 0 ? uploadedBikePhotoNames : garage?.bikePhotoNames || [];
-    const formProfileDataUrl = profilePreview?.dataUrl || await getImageDataUrl(form, "profilePhoto");
-    const profilePhotoDataUrl = formProfileDataUrl || garage?.profilePhotoDataUrl || "";
-    const formBikeDataUrls = bikePreviews.length > 0 ? bikePreviews : await getImageDataUrls(form, "bikePhotos");
-    const bikePhotoDataUrls = formBikeDataUrls.length > 0 ? formBikeDataUrls : garage?.bikePhotoDataUrls || [];
 
-    const next: RiderGarage = {
-      profilePhotoName,
-      profilePhotoDataUrl,
-      selectedInventoryBikeId,
-      bikeNickname: String(form.get("bikeNickname") || ""),
-      year: String(form.get("year") || selectedBike.year),
-      make: String(form.get("make") || selectedBike.make),
-      model: String(form.get("model") || selectedBike.model),
-      passengerSetup: String(form.get("passengerSetup") || ""),
-      comfortNotes: String(form.get("comfortNotes") || ""),
-      bikePhotoNames,
-      bikePhotoDataUrls,
-      updatedAt: new Date().toISOString()
-    };
-    setGarage(next);
-    saveGarageToLocalStorage(next);
-    setGarageSaved(true);
-    window.setTimeout(() => setGarageSaved(false), 2500);
+    try {
+      const uploadResult = await uploadGarageAssets(form, session?.riderName || "rider");
+      const profilePhotoName = uploadResult?.profilePhoto?.name || profilePreview?.name || getFileName(form, "profilePhoto") || garage?.profilePhotoName || "";
+      const uploadedBikePhotoNames = uploadResult?.bikePhotos?.length ? uploadResult.bikePhotos.map((photo) => photo.name) : bikePreviews.length > 0 ? bikePreviews.map((photo) => photo.name) : getFileNames(form, "bikePhotos");
+      const bikePhotoNames = uploadedBikePhotoNames.length > 0 ? uploadedBikePhotoNames : garage?.bikePhotoNames || [];
+      const formProfileDataUrl = profilePreview?.dataUrl || await getImageDataUrl(form, "profilePhoto");
+      const profilePhotoDataUrl = formProfileDataUrl || garage?.profilePhotoDataUrl || "";
+      const formBikeDataUrls = bikePreviews.length > 0 ? bikePreviews : await getImageDataUrls(form, "bikePhotos");
+      const bikePhotoDataUrls = formBikeDataUrls.length > 0 ? formBikeDataUrls : garage?.bikePhotoDataUrls || [];
+      const profilePhotoUrl = uploadResult?.profilePhoto?.url || garage?.profilePhotoUrl || "";
+      const bikePhotoUrls = uploadResult?.bikePhotos?.length ? uploadResult.bikePhotos : garage?.bikePhotoUrls || [];
+
+      const next: RiderGarage = {
+        profilePhotoName,
+        profilePhotoDataUrl,
+        profilePhotoUrl,
+        selectedInventoryBikeId,
+        bikeNickname: String(form.get("bikeNickname") || ""),
+        year: String(form.get("year") || selectedBike.year),
+        make: String(form.get("make") || selectedBike.make),
+        model: String(form.get("model") || selectedBike.model),
+        passengerSetup: String(form.get("passengerSetup") || ""),
+        comfortNotes: String(form.get("comfortNotes") || ""),
+        bikePhotoNames,
+        bikePhotoDataUrls,
+        bikePhotoUrls,
+        updatedAt: new Date().toISOString()
+      };
+      setGarage(next);
+      saveGarageToLocalStorage(next);
+      setGarageSaved(true);
+      window.setTimeout(() => setGarageSaved(false), 2500);
+    } catch (error) {
+      setGarageError(error instanceof Error ? error.message : "Image upload failed. Confirm Supabase buckets exist and are public for rider/motorcycle photos.");
+    }
   }
 
-  if (!session) {
-    return <main className="min-h-screen bg-rr-radial p-10 text-white">Loading rider portal...</main>;
-  }
+  if (!session) return <main className="min-h-screen bg-rr-radial p-10 text-white">Loading rider portal...</main>;
 
   const riderName = session.riderName || "Rider";
   const riderInitials = riderName.slice(0, 2).toUpperCase();
-  const displayProfileImage = profilePreview?.dataUrl || garage?.profilePhotoDataUrl || "";
-  const displayBikeImages = bikePreviews.length > 0 ? bikePreviews : garage?.bikePhotoDataUrls || [];
+  const displayProfileImage = profilePreview?.dataUrl || garage?.profilePhotoUrl || garage?.profilePhotoDataUrl || "";
+  const displayBikeImages = bikePreviews.length > 0 ? bikePreviews : garage?.bikePhotoUrls?.map((photo) => ({ name: photo.name, dataUrl: photo.url, url: photo.url })) || garage?.bikePhotoDataUrls || [];
 
   return (
     <main className="min-h-screen bg-rr-radial text-white">
@@ -232,9 +255,7 @@ export default function RiderDashboardPage() {
             <h1 className="rr-metal-text mt-3 text-5xl font-black">Welcome, {riderName}</h1>
             <p className="mt-4 max-w-3xl text-rr-chrome">Review ride requests, manage your rider profile, and keep your motorcycle garage ready for passenger bookings.</p>
           </div>
-          <SignOutButton redirectUrl="/rider-login">
-            <button className="rounded-full border border-white/10 px-5 py-3 text-sm text-rr-silver hover:border-rr-purple/60">Log out</button>
-          </SignOutButton>
+          <SignOutButton redirectUrl="/rider-login"><button className="rounded-full border border-white/10 px-5 py-3 text-sm text-rr-silver hover:border-rr-purple/60">Log out</button></SignOutButton>
         </div>
 
         <div className="mt-8 grid gap-4 md:grid-cols-4">
@@ -264,18 +285,15 @@ export default function RiderDashboardPage() {
             <form onSubmit={saveGarage} className="rr-card rounded-[2rem] p-7">
               <div className="text-xs uppercase tracking-[0.34em] text-rr-purple">Rider garage</div>
               <h2 className="mt-2 text-2xl font-black">Bike inventory and photos</h2>
-              <p className="mt-2 text-sm leading-6 text-rr-chrome">Image previews appear immediately when selected. Save garage assigns them to the rider/bike profile. Supabase Storage is the next persistence step.</p>
-              {garageSaved ? <div className="mt-4 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-100">Garage saved and images assigned.</div> : null}
+              <p className="mt-2 text-sm leading-6 text-rr-chrome">Save garage now uploads images to Supabase Storage and assigns those image URLs to the rider marketplace profile when Admin approves.</p>
+              {garageSaved ? <div className="mt-4 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-100">Garage saved and image URLs stored.</div> : null}
+              {garageError ? <div className="mt-4 rounded-2xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-100">{garageError}</div> : null}
               <div className="mt-5 grid gap-4">
                 <label className={labelClass}>Profile picture<input type="file" name="profilePhoto" accept="image/*" onChange={handleProfileImageChange} className={inputClass} /></label>
                 {profilePreview ? <img src={profilePreview.dataUrl} alt={profilePreview.name} className="h-24 w-24 rounded-full border border-rr-purple/40 object-cover" /> : null}
                 <label className={labelClass}>Inventory model<select name="selectedInventoryBikeId" defaultValue={garage?.selectedInventoryBikeId || motorcycleInventory[0].id} className={inputClass}>{motorcycleInventory.map((bike) => <option key={bike.id} value={bike.id}>{bike.make} {bike.model}</option>)}</select></label>
                 <label className={labelClass}>Bike nickname<input name="bikeNickname" defaultValue={garage?.bikeNickname || ""} className={inputClass} placeholder="The couch rocket, Big Red, etc." /></label>
-                <div className="grid gap-4 md:grid-cols-3">
-                  <label className={labelClass}>Year<input name="year" defaultValue={garage?.year || ""} className={inputClass} /></label>
-                  <label className={labelClass}>Make<input name="make" defaultValue={garage?.make || ""} className={inputClass} /></label>
-                  <label className={labelClass}>Model<input name="model" defaultValue={garage?.model || ""} className={inputClass} /></label>
-                </div>
+                <div className="grid gap-4 md:grid-cols-3"><label className={labelClass}>Year<input name="year" defaultValue={garage?.year || ""} className={inputClass} /></label><label className={labelClass}>Make<input name="make" defaultValue={garage?.make || ""} className={inputClass} /></label><label className={labelClass}>Model<input name="model" defaultValue={garage?.model || ""} className={inputClass} /></label></div>
                 <label className={labelClass}>Passenger setup<textarea name="passengerSetup" defaultValue={garage?.passengerSetup || ""} rows={3} className={inputClass} placeholder="Passenger seat, pegs, backrest, floorboards, trunk, comms, luggage..." /></label>
                 <label className={labelClass}>Passenger comfort notes<textarea name="comfortNotes" defaultValue={garage?.comfortNotes || ""} rows={3} className={inputClass} placeholder="Best for short rides, long rides, nervous first-time passengers, taller passengers..." /></label>
                 <label className={labelClass}>Upload bike photos<input type="file" name="bikePhotos" accept="image/*" multiple onChange={handleBikeImagesChange} className={inputClass} /></label>
@@ -288,58 +306,18 @@ export default function RiderDashboardPage() {
               <div className="text-xs uppercase tracking-[0.34em] text-rr-purple">Public preview</div>
               <h2 className="mt-2 text-2xl font-black">How the rider/bike profile appears</h2>
               <div className="mt-5 rounded-3xl border border-white/10 bg-black/30 p-5">
-                <div className="flex items-center gap-4">
-                  {displayProfileImage ? <img src={displayProfileImage} alt={`${riderName} profile`} className="h-16 w-16 rounded-full border border-rr-purple/40 object-cover" /> : <div className="flex h-16 w-16 items-center justify-center rounded-full border border-rr-purple/40 bg-rr-purple/10 text-lg font-black">{riderInitials}</div>}
-                  <div><div className="text-xl font-black">{riderName}</div><div className="text-sm text-rr-chrome">{session.ridingStyle}</div></div>
-                </div>
+                <div className="flex items-center gap-4">{displayProfileImage ? <img src={displayProfileImage} alt={`${riderName} profile`} className="h-16 w-16 rounded-full border border-rr-purple/40 object-cover" /> : <div className="flex h-16 w-16 items-center justify-center rounded-full border border-rr-purple/40 bg-rr-purple/10 text-lg font-black">{riderInitials}</div>}<div><div className="text-xl font-black">{riderName}</div><div className="text-sm text-rr-chrome">{session.ridingStyle}</div></div></div>
                 {displayBikeImages.length > 0 ? <div className="mt-5 grid gap-3 sm:grid-cols-2"><img src={displayBikeImages[0].dataUrl} alt={displayBikeImages[0].name} className="h-48 w-full rounded-2xl border border-white/10 object-cover sm:col-span-2" />{displayBikeImages.slice(1, 5).map((photo) => <img key={photo.name} src={photo.dataUrl} alt={photo.name} className="h-32 w-full rounded-2xl border border-white/10 object-cover" />)}</div> : <div className="mt-5 rounded-2xl border border-dashed border-white/15 bg-black/30 p-6 text-sm text-rr-chrome">No assigned bike images yet.</div>}
-                <div className="mt-5 rounded-2xl border border-white/10 bg-black/40 p-4 text-sm text-rr-silver">
-                  <strong className="text-white">Bike:</strong> {garage?.year || "Year"} {garage?.make || "Make"} {garage?.model || "Model"}<br />
-                  <strong className="text-white">Nickname:</strong> {garage?.bikeNickname || "Not set"}<br />
-                  <strong className="text-white">Passenger setup:</strong> {garage?.passengerSetup || "Not set"}<br />
-                  <strong className="text-white">Bike photos:</strong> {garage?.bikePhotoNames?.length ? garage.bikePhotoNames.join(", ") : "No bike photos uploaded yet"}<br />
-                  <strong className="text-white">Profile image:</strong> {garage?.profilePhotoName || "No profile picture uploaded yet"}
-                </div>
+                <div className="mt-5 rounded-2xl border border-white/10 bg-black/40 p-4 text-sm text-rr-silver"><strong className="text-white">Bike:</strong> {garage?.year || "Year"} {garage?.make || "Make"} {garage?.model || "Model"}<br /><strong className="text-white">Nickname:</strong> {garage?.bikeNickname || "Not set"}<br /><strong className="text-white">Passenger setup:</strong> {garage?.passengerSetup || "Not set"}<br /><strong className="text-white">Stored bike URLs:</strong> {garage?.bikePhotoUrls?.length || 0}<br /><strong className="text-white">Profile URL:</strong> {garage?.profilePhotoUrl ? "Stored in Supabase" : "Not stored yet"}</div>
               </div>
             </div>
           </div>
 
           <section>
-            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-              <div>
-                <div className="text-xs uppercase tracking-[0.34em] text-rr-purple">Ride request inbox</div>
-                <h2 className="mt-2 text-2xl font-black">Passenger requests</h2>
-              </div>
-              <Link href="/admin" className="text-sm text-rr-purple">Admin view →</Link>
-            </div>
+            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between"><div><div className="text-xs uppercase tracking-[0.34em] text-rr-purple">Ride request inbox</div><h2 className="mt-2 text-2xl font-black">Passenger requests</h2></div><Link href="/admin" className="text-sm text-rr-purple">Admin view →</Link></div>
             <div className="mt-5 grid gap-4">
               {requests.length === 0 ? <div className="rr-card rounded-3xl p-6 text-rr-chrome">No passenger requests yet. Create one from the Request Ride page.</div> : null}
-              {requests.map((request, index) => (
-                <article key={`${request.createdAt}-${index}`} className="rr-card rounded-3xl p-6">
-                  <div className="text-xs uppercase tracking-[0.25em] text-rr-purple">{request.status}</div>
-                  <h3 className="mt-3 text-2xl font-black">{request.passengerName}</h3>
-                  <p className="mt-2 text-rr-chrome">{request.experience} · {request.selectedBikeName || request.motorcycle}</p>
-                  <p className="mt-2 text-sm text-rr-silver">Requested rider: {request.selectedRiderName || "Any approved rider"}</p>
-                  <p className="mt-2 text-sm text-rr-silver">{request.date} at {request.time} · {request.duration}</p>
-                  <p className="mt-2 text-sm text-rr-silver">Phone: {request.phone} · Emergency contact: {request.emergencyContact}</p>
-                  <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                    <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-rr-silver">
-                      <strong className="text-white">Route:</strong><br />
-                      Pickup: {request.pickupLocation || "Not captured"}<br />
-                      Drop-off: {request.dropoffLocation || "Not captured"}<br />
-                      Preference: {request.routePreference || "Not captured"}<br />
-                      Estimate: {request.estimatedDistance || "Pending"} · {request.estimatedRideTime || "Pending"}<br />
-                      Notes: {request.riderNotes || "None"}
-                    </div>
-                    <MockRouteMap pickup={request.pickupLocation} dropoff={request.dropoffLocation} compact />
-                  </div>
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    <button onClick={() => updateRideStatus(index, `Accepted by ${riderName}`)} className="rounded-full bg-rr-purple px-4 py-2 text-sm">Accept ride</button>
-                    <button onClick={() => updateRideStatus(index, `Needs follow-up from ${riderName}`)} className="rounded-full border border-white/10 px-4 py-2 text-sm text-rr-silver">Ask follow-up</button>
-                    <button onClick={() => updateRideStatus(index, `Declined by ${riderName}`)} className="rounded-full border border-white/10 px-4 py-2 text-sm text-rr-silver">Decline</button>
-                  </div>
-                </article>
-              ))}
+              {requests.map((request, index) => <article key={`${request.createdAt}-${index}`} className="rr-card rounded-3xl p-6"><div className="text-xs uppercase tracking-[0.25em] text-rr-purple">{request.status}</div><h3 className="mt-3 text-2xl font-black">{request.passengerName}</h3><p className="mt-2 text-rr-chrome">{request.experience} · {request.selectedBikeName || request.motorcycle}</p><p className="mt-2 text-sm text-rr-silver">Requested rider: {request.selectedRiderName || "Any approved rider"}</p><p className="mt-2 text-sm text-rr-silver">{request.date} at {request.time} · {request.duration}</p><p className="mt-2 text-sm text-rr-silver">Phone: {request.phone} · Emergency contact: {request.emergencyContact}</p><div className="mt-4 grid gap-4 lg:grid-cols-2"><div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-rr-silver"><strong className="text-white">Route:</strong><br />Pickup: {request.pickupLocation || "Not captured"}<br />Drop-off: {request.dropoffLocation || "Not captured"}<br />Preference: {request.routePreference || "Not captured"}<br />Estimate: {request.estimatedDistance || "Pending"} · {request.estimatedRideTime || "Pending"}<br />Notes: {request.riderNotes || "None"}</div><MockRouteMap pickup={request.pickupLocation} dropoff={request.dropoffLocation} compact /></div><div className="mt-5 flex flex-wrap gap-2"><button onClick={() => updateRideStatus(index, `Accepted by ${riderName}`)} className="rounded-full bg-rr-purple px-4 py-2 text-sm">Accept ride</button><button onClick={() => updateRideStatus(index, `Needs follow-up from ${riderName}`)} className="rounded-full border border-white/10 px-4 py-2 text-sm text-rr-silver">Ask follow-up</button><button onClick={() => updateRideStatus(index, `Declined by ${riderName}`)} className="rounded-full border border-white/10 px-4 py-2 text-sm text-rr-silver">Decline</button></div></article>)}
             </div>
           </section>
         </section>
