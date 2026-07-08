@@ -89,6 +89,12 @@ export type RideRequest = {
   passengerName: string;
   phone: string;
   emergencyContact: string;
+  pickupLocation: string;
+  dropoffLocation: string;
+  routePreference: string;
+  riderNotes: string;
+  estimatedDistance: string;
+  estimatedRideTime: string;
   experience: string;
   motorcycle: string;
   date: string;
@@ -119,6 +125,16 @@ export type RiderApplication = {
   status: string;
   createdAt: string;
 };
+
+export function estimateRoute(pickupLocation: string, dropoffLocation: string, duration: string) {
+  const base = pickupLocation.length + dropoffLocation.length + duration.length;
+  const miles = Math.max(6, Math.min(85, Math.round(base * 1.7)));
+  const minutes = duration.includes("3") ? 180 : duration.includes("2") ? 120 : 90;
+  return {
+    estimatedDistance: `${miles} mi estimated`,
+    estimatedRideTime: `${minutes} min planned`
+  };
+}
 
 export function daysUntil(dateValue: string) {
   if (!dateValue) return null;
