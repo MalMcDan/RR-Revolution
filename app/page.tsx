@@ -17,8 +17,8 @@ export default function HomePage() {
       <header className="border-b border-white/10 bg-rr-black/80 px-6 py-5 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <Link href="/" className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-rr-chrome/20 bg-rr-gunmetal shadow-glow">
-              <span className="rr-metal-text font-serif text-2xl font-black tracking-[-0.12em]">RR</span>
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-rr-chrome/20 bg-black/60 p-1 shadow-glow">
+              <img src="/brand/rr-monogram.svg" alt="Ride Relax RR monogram" className="h-full w-full object-contain" />
             </div>
             <div>
               <div className="text-sm font-semibold uppercase tracking-[0.32em] text-rr-silver">Ride Relax</div>
