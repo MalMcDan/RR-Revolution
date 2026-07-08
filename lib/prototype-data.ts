@@ -69,6 +69,22 @@ export const riders = [
   }
 ];
 
+export type PassengerRelease = {
+  passengerFullName: string;
+  dateOfBirth: string;
+  emergencyContactConfirmed: boolean;
+  helmetAcknowledged: boolean;
+  soberAcknowledged: boolean;
+  riskAcknowledged: boolean;
+  medicalAcknowledged: boolean;
+  conductAcknowledged: boolean;
+  mediaConsent: string;
+  electronicSignature: string;
+  initials: string;
+  signedAt: string;
+  releaseVersion: string;
+};
+
 export type RideRequest = {
   passengerName: string;
   phone: string;
@@ -79,6 +95,7 @@ export type RideRequest = {
   time: string;
   duration: string;
   safetyAccepted: boolean;
+  passengerRelease: PassengerRelease;
   status: string;
   createdAt: string;
 };

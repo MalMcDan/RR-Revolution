@@ -51,7 +51,7 @@ export default function AdminPage() {
       <section className="mx-auto max-w-7xl px-6 py-12">
         <div className="text-xs uppercase tracking-[0.42em] text-rr-purple">Admin prototype</div>
         <h1 className="rr-metal-text mt-3 text-5xl font-black">Approval dashboard</h1>
-        <p className="mt-4 max-w-3xl text-rr-chrome">Review locally submitted ride requests, rider applications, motorcycle photos, document expiration warnings, and access status.</p>
+        <p className="mt-4 max-w-3xl text-rr-chrome">Review locally submitted ride requests, passenger release records, rider applications, motorcycle photos, document expiration warnings, and access status.</p>
 
         <div className="mt-8 grid gap-4 md:grid-cols-4">
           <div className="rr-card rounded-3xl p-6"><div className="text-sm text-rr-chrome">Ride requests</div><div className="mt-2 text-4xl font-black">{requests.length}</div></div>
@@ -83,6 +83,10 @@ export default function AdminPage() {
               <p className="mt-2 text-rr-chrome">{request.experience} · {request.motorcycle}</p>
               <p className="mt-2 text-sm text-rr-silver">{request.date} at {request.time} · {request.duration}</p>
               <p className="mt-2 text-sm text-rr-silver">Phone: {request.phone} · Emergency contact: {request.emergencyContact}</p>
+              <div className="mt-4 rounded-2xl border border-rr-purple/30 bg-rr-purple/5 p-4 text-sm text-rr-silver">
+                <strong className="text-white">Passenger release:</strong><br />
+                {request.passengerRelease ? <>Signed by {request.passengerRelease.electronicSignature} · Initials {request.passengerRelease.initials}<br />DOB: {request.passengerRelease.dateOfBirth} · Signed: {new Date(request.passengerRelease.signedAt).toLocaleString()}<br />Media consent: {request.passengerRelease.mediaConsent}<br />Version: {request.passengerRelease.releaseVersion}</> : "No passenger release found for this request."}
+              </div>
               <div className="mt-5 flex flex-wrap gap-2"><button onClick={() => setRequestStatus(index, "Accepted by rider")} className="rounded-full bg-rr-purple px-4 py-2 text-sm">Accept</button><button onClick={() => setRequestStatus(index, "Needs passenger follow-up")} className="rounded-full border border-white/10 px-4 py-2 text-sm text-rr-silver">Follow up</button><button onClick={() => setRequestStatus(index, "Declined for safety/review")} className="rounded-full border border-white/10 px-4 py-2 text-sm text-rr-silver">Decline</button></div>
             </article>
           ))}
@@ -102,10 +106,7 @@ export default function AdminPage() {
                 <p className="mt-2 text-rr-chrome">{application.yearsRiding} · {application.endorsement} · {application.insurance}</p>
                 <p className="mt-2 text-sm text-rr-silver">{application.motorcycle}</p>
                 <p className="mt-2 text-sm text-rr-silver">Availability: {application.availability}</p>
-                <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-rr-silver">
-                  <strong className="text-white">Motorcycle photos:</strong><br />
-                  {motorcyclePhotoNames.length > 0 ? motorcyclePhotoNames.join(", ") : "No bike photos uploaded"}
-                </div>
+                <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-rr-silver"><strong className="text-white">Motorcycle photos:</strong><br />{motorcyclePhotoNames.length > 0 ? motorcyclePhotoNames.join(", ") : "No bike photos uploaded"}</div>
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
                   <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-rr-silver">ID file: {application.idDocumentName || "Missing"}<br />ID expires: {application.idExpirationDate || "Missing"}</div>
                   <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-rr-silver">Insurance file: {application.insuranceDocumentName || "Missing"}<br />Insurance expires: {application.insuranceExpirationDate || "Missing"}</div>
