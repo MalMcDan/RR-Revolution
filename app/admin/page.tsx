@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { PrototypeNav } from "../../components/prototype-nav";
+import { MockRouteMap } from "../../components/mock-route-map";
 import { getDocumentStatus, type RideRequest, type RiderApplication } from "../../lib/prototype-data";
 
 function updateStoredList<T>(key: string, list: T[]) {
@@ -51,7 +52,7 @@ export default function AdminPage() {
       <section className="mx-auto max-w-7xl px-6 py-12">
         <div className="text-xs uppercase tracking-[0.42em] text-rr-purple">Admin prototype</div>
         <h1 className="rr-metal-text mt-3 text-5xl font-black">Approval dashboard</h1>
-        <p className="mt-4 max-w-3xl text-rr-chrome">Review locally submitted ride requests, passenger release records, rider applications, motorcycle photos, document expiration warnings, and access status.</p>
+        <p className="mt-4 max-w-3xl text-rr-chrome">Review locally submitted ride requests, route previews, passenger release records, rider applications, motorcycle photos, document expiration warnings, and access status.</p>
 
         <div className="mt-8 grid gap-4 md:grid-cols-4">
           <div className="rr-card rounded-3xl p-6"><div className="text-sm text-rr-chrome">Ride requests</div><div className="mt-2 text-4xl font-black">{requests.length}</div></div>
@@ -83,6 +84,17 @@ export default function AdminPage() {
               <p className="mt-2 text-rr-chrome">{request.experience} · {request.motorcycle}</p>
               <p className="mt-2 text-sm text-rr-silver">{request.date} at {request.time} · {request.duration}</p>
               <p className="mt-2 text-sm text-rr-silver">Phone: {request.phone} · Emergency contact: {request.emergencyContact}</p>
+              <div className="mt-4 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+                <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-rr-silver">
+                  <strong className="text-white">Route details:</strong><br />
+                  Pickup: {request.pickupLocation || "Not captured"}<br />
+                  Drop-off: {request.dropoffLocation || "Not captured"}<br />
+                  Preference: {request.routePreference || "Not captured"}<br />
+                  Estimate: {request.estimatedDistance || "Pending"} · {request.estimatedRideTime || "Pending"}<br />
+                  Rider notes: {request.riderNotes || "None"}
+                </div>
+                <MockRouteMap pickup={request.pickupLocation} dropoff={request.dropoffLocation} compact />
+              </div>
               <div className="mt-4 rounded-2xl border border-rr-purple/30 bg-rr-purple/5 p-4 text-sm text-rr-silver">
                 <strong className="text-white">Passenger release:</strong><br />
                 {request.passengerRelease ? <>Signed by {request.passengerRelease.electronicSignature} · Initials {request.passengerRelease.initials}<br />DOB: {request.passengerRelease.dateOfBirth} · Signed: {new Date(request.passengerRelease.signedAt).toLocaleString()}<br />Media consent: {request.passengerRelease.mediaConsent}<br />Version: {request.passengerRelease.releaseVersion}</> : "No passenger release found for this request."}

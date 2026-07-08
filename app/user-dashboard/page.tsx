@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PrototypeNav } from "../../components/prototype-nav";
+import { MockRouteMap } from "../../components/mock-route-map";
 import { getSession, logout, type PrototypeAccount } from "../../lib/prototype-auth";
 import type { RideRequest } from "../../lib/prototype-data";
 
@@ -42,7 +43,7 @@ export default function UserDashboardPage() {
           <div>
             <div className="text-xs uppercase tracking-[0.42em] text-rr-purple">User dashboard</div>
             <h1 className="rr-metal-text mt-3 text-5xl font-black">Welcome, {account.name}</h1>
-            <p className="mt-4 max-w-3xl text-rr-chrome">Request a ride, check ride status, and keep track of your Ride Relax history.</p>
+            <p className="mt-4 max-w-3xl text-rr-chrome">Request a ride, check ride status, view pickup/drop-off details, and keep track of your Ride Relax history.</p>
           </div>
           <button onClick={signOut} className="rounded-full border border-white/10 px-5 py-3 text-sm text-rr-silver hover:border-rr-purple/60">Log out</button>
         </div>
@@ -60,6 +61,16 @@ export default function UserDashboardPage() {
               <h3 className="mt-3 text-2xl font-black">{request.experience}</h3>
               <p className="mt-2 text-rr-chrome">{request.motorcycle}</p>
               <p className="mt-2 text-sm text-rr-silver">{request.date} at {request.time} · {request.duration}</p>
+              <div className="mt-4 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+                <div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-rr-silver">
+                  <strong className="text-white">Route:</strong><br />
+                  Pickup: {request.pickupLocation || "Not captured"}<br />
+                  Drop-off: {request.dropoffLocation || "Not captured"}<br />
+                  Preference: {request.routePreference || "Not captured"}<br />
+                  Estimate: {request.estimatedDistance || "Pending"} · {request.estimatedRideTime || "Pending"}
+                </div>
+                <MockRouteMap pickup={request.pickupLocation} dropoff={request.dropoffLocation} compact />
+              </div>
             </article>
           ))}
         </div>
