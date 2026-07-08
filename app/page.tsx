@@ -18,14 +18,17 @@ export default function HomePage() {
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <Link href="/" className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-rr-chrome/20 bg-black/60 p-1 shadow-glow">
-              <img src="/brand/rr-monogram-visible.png" alt="Ride Relax RR monogram" className="h-full w-full object-contain" />
+              <span className="rr-metal-text font-serif text-xl font-black tracking-[-0.12em]">RR</span>
             </div>
             <div>
               <div className="text-sm font-semibold uppercase tracking-[0.32em] text-rr-silver">Ride Relax</div>
               <div className="text-xs text-rr-chrome/70">Curated motorcycle experiences</div>
             </div>
           </Link>
-          <Link href="#preview" className="rounded-full border border-rr-purple/50 px-4 py-2 text-sm shadow-glow">Preview app</Link>
+          <div className="flex gap-2 text-sm">
+            <Link href="/experiences" className="rounded-full border border-white/10 px-4 py-2 text-rr-chrome hover:text-white">Browse</Link>
+            <Link href="/admin" className="rounded-full border border-rr-purple/50 px-4 py-2 shadow-glow">Admin</Link>
+          </div>
         </div>
       </header>
 
@@ -35,8 +38,8 @@ export default function HomePage() {
           <h1 className="rr-metal-text max-w-4xl text-5xl font-black leading-[0.95] tracking-tight md:text-7xl">Ride Relax: curated motorcycle experiences, built for trust.</h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-rr-chrome">RR stands for Ride Relax: a scheduled motorcycle experience marketplace where passengers browse approved riders, choose the bike, pick the experience, acknowledge safety requirements, and request a ride that gets accepted manually.</p>
           <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-            <Link href="#schedule" className="rounded-full bg-rr-purple px-6 py-3 text-center font-semibold shadow-glow">Request a ride</Link>
-            <Link href="#rider" className="rounded-full border border-rr-chrome/30 px-6 py-3 text-center font-semibold text-rr-silver">Become a rider</Link>
+            <Link href="/request" className="rounded-full bg-rr-purple px-6 py-3 text-center font-semibold shadow-glow">Request a ride</Link>
+            <Link href="/rider-application" className="rounded-full border border-rr-chrome/30 px-6 py-3 text-center font-semibold text-rr-silver">Become a rider</Link>
           </div>
         </div>
         <div className="rr-card overflow-hidden rounded-[2rem] p-4">
@@ -52,11 +55,16 @@ export default function HomePage() {
 
       <section id="preview" className="mx-auto max-w-7xl px-6 pb-24">
         <div className="rr-card rounded-[2rem] p-8">
-          <div className="text-xs uppercase tracking-[0.42em] text-rr-purple">Next preview update</div>
-          <h2 className="rr-metal-text mt-3 text-4xl font-black">Passenger, rider, and admin foundation</h2>
-          <p className="mt-4 max-w-3xl text-sm leading-6 text-rr-chrome">This deploy keeps the visual build live while the MVP architecture grows behind it. The next functional layer is scheduled ride requests, rider applications, motorcycle inventory, safety waiver flow, and an admin approval queue.</p>
+          <div className="text-xs uppercase tracking-[0.42em] text-rr-purple">Clickable client prototype</div>
+          <h2 className="rr-metal-text mt-3 text-4xl font-black">Passenger, rider, and admin flows are ready to test</h2>
+          <p className="mt-4 max-w-3xl text-sm leading-6 text-rr-chrome">Use the prototype to submit a ride request, submit a rider application, browse sample experiences, and review local submissions in the admin dashboard.</p>
           <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {adminPreview.map((item) => <div key={item} className="rounded-2xl border border-white/10 bg-white/[.03] p-4 text-sm text-rr-silver">{item}</div>)}
+          </div>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Link href="/experiences" className="rounded-full border border-white/10 px-5 py-3 text-sm text-rr-silver hover:border-rr-purple/60">Browse experiences</Link>
+            <Link href="/request" className="rounded-full bg-rr-purple px-5 py-3 text-sm font-semibold shadow-glow">Submit ride request</Link>
+            <Link href="/admin" className="rounded-full border border-white/10 px-5 py-3 text-sm text-rr-silver hover:border-rr-purple/60">Open admin</Link>
           </div>
         </div>
       </section>
