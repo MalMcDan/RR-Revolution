@@ -38,10 +38,10 @@ export function ClerkAccess({
             This now uses Clerk authentication. Your account is real and will persist outside this browser.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
-            <SignInButton mode="modal" forceRedirectUrl={dashboardPath}>
+            <SignInButton mode="modal" fallbackRedirectUrl={dashboardPath} forceRedirectUrl={dashboardPath}>
               <button onClick={rememberRoleChoice} className="rounded-full bg-rr-purple px-6 py-3 font-semibold shadow-glow">Log in</button>
             </SignInButton>
-            <SignUpButton mode="modal" forceRedirectUrl={dashboardPath}>
+            <SignUpButton mode="modal" fallbackRedirectUrl={dashboardPath} forceRedirectUrl={dashboardPath}>
               <button onClick={rememberRoleChoice} className="rounded-full border border-white/10 px-6 py-3 text-rr-silver hover:border-rr-purple/60">Create account</button>
             </SignUpButton>
           </div>
