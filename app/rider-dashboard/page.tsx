@@ -21,8 +21,14 @@ type RiderSession = {
   loginAt: string;
 };
 
+type StoredImage = {
+  name: string;
+  dataUrl: string;
+};
+
 type RiderGarage = {
   profilePhotoName: string;
+  profilePhotoDataUrl?: string;
   selectedInventoryBikeId: string;
   bikeNickname: string;
   year: string;
@@ -31,6 +37,7 @@ type RiderGarage = {
   passengerSetup: string;
   comfortNotes: string;
   bikePhotoNames: string[];
+  bikePhotoDataUrls?: StoredImage[];
   updatedAt: string;
 };
 
@@ -50,6 +57,26 @@ function getFileName(form: FormData, fieldName: string) {
 
 function getFileNames(form: FormData, fieldName: string) {
   return form.getAll(fieldName).filter((file): file is File => file instanceof File && Boolean(file.name)).map((file) => file.name);
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function getImageDataUrl(form: FormData, fieldName: string) {
+  const file = form.get(fieldName);
+  if (!(file instanceof File) || !file.name) return "";
+  return readFileAsDataUrl(file);
+}
+
+async function getImageDataUrls(form: FormData, fieldName: string) {
+  const files = form.getAll(fieldName).filter((file): file is File => file instanceof File && Boolean(file.name));
+  return Promise.all(files.map(async (file) => ({ name: file.name, dataUrl: await readFileAsDataUrl(file) })));
 }
 
 function normalizeRiderSession(value: Partial<RiderSession> | null | undefined, fallbackName = "Rider", fallbackEmail = ""): RiderSession {
@@ -123,7 +150,7 @@ export default function RiderDashboardPage() {
     window.setTimeout(() => setSaved(false), 2500);
   }
 
-  function saveGarage(event: FormEvent<HTMLFormElement>) {
+  async function saveGarage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const selectedInventoryBikeId = String(form.get("selectedInventoryBikeId") || motorcycleInventory[0].id);
@@ -131,8 +158,13 @@ export default function RiderDashboardPage() {
     const profilePhotoName = getFileName(form, "profilePhoto") || garage?.profilePhotoName || "";
     const uploadedBikePhotoNames = getFileNames(form, "bikePhotos");
     const bikePhotoNames = uploadedBikePhotoNames.length > 0 ? uploadedBikePhotoNames : garage?.bikePhotoNames || [];
+    const profilePhotoDataUrl = await getImageDataUrl(form, "profilePhoto") || garage?.profilePhotoDataUrl || "";
+    const uploadedBikePhotoDataUrls = await getImageDataUrls(form, "bikePhotos");
+    const bikePhotoDataUrls = uploadedBikePhotoDataUrls.length > 0 ? uploadedBikePhotoDataUrls : garage?.bikePhotoDataUrls || [];
+
     const next: RiderGarage = {
       profilePhotoName,
+      profilePhotoDataUrl,
       selectedInventoryBikeId,
       bikeNickname: String(form.get("bikeNickname") || ""),
       year: String(form.get("year") || selectedBike.year),
@@ -141,6 +173,7 @@ export default function RiderDashboardPage() {
       passengerSetup: String(form.get("passengerSetup") || ""),
       comfortNotes: String(form.get("comfortNotes") || ""),
       bikePhotoNames,
+      bikePhotoDataUrls,
       updatedAt: new Date().toISOString()
     };
     localStorage.setItem("rr_rider_garage", JSON.stringify(next));
@@ -198,8 +231,8 @@ export default function RiderDashboardPage() {
             <form onSubmit={saveGarage} className="rr-card rounded-[2rem] p-7">
               <div className="text-xs uppercase tracking-[0.34em] text-rr-purple">Rider garage</div>
               <h2 className="mt-2 text-2xl font-black">Bike inventory and photos</h2>
-              <p className="mt-2 text-sm leading-6 text-rr-chrome">Select the closest inventory model, add your exact bike details, upload your profile picture, and upload photos of your own motorcycle. Prototype stores filenames only.</p>
-              {garageSaved ? <div className="mt-4 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-100">Garage saved.</div> : null}
+              <p className="mt-2 text-sm leading-6 text-rr-chrome">Select the closest inventory model, add your exact bike details, upload your profile picture, and upload photos of your own motorcycle. Images are now assigned to this rider profile locally; Supabase Storage is the next persistence step.</p>
+              {garageSaved ? <div className="mt-4 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-100">Garage saved and images assigned.</div> : null}
               <div className="mt-5 grid gap-4">
                 <label className={labelClass}>Profile picture<input type="file" name="profilePhoto" accept="image/*" className={inputClass} /></label>
                 <label className={labelClass}>Inventory model<select name="selectedInventoryBikeId" defaultValue={garage?.selectedInventoryBikeId || motorcycleInventory[0].id} className={inputClass}>{motorcycleInventory.map((bike) => <option key={bike.id} value={bike.id}>{bike.make} {bike.model}</option>)}</select></label>
@@ -221,9 +254,10 @@ export default function RiderDashboardPage() {
               <h2 className="mt-2 text-2xl font-black">How the rider/bike profile appears</h2>
               <div className="mt-5 rounded-3xl border border-white/10 bg-black/30 p-5">
                 <div className="flex items-center gap-4">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full border border-rr-purple/40 bg-rr-purple/10 text-lg font-black">{garage?.profilePhotoName ? "IMG" : riderInitials}</div>
+                  {garage?.profilePhotoDataUrl ? <img src={garage.profilePhotoDataUrl} alt={`${riderName} profile`} className="h-16 w-16 rounded-full border border-rr-purple/40 object-cover" /> : <div className="flex h-16 w-16 items-center justify-center rounded-full border border-rr-purple/40 bg-rr-purple/10 text-lg font-black">{riderInitials}</div>}
                   <div><div className="text-xl font-black">{riderName}</div><div className="text-sm text-rr-chrome">{session.ridingStyle}</div></div>
                 </div>
+                {garage?.bikePhotoDataUrls?.length ? <div className="mt-5 grid gap-3 sm:grid-cols-2"><img src={garage.bikePhotoDataUrls[0].dataUrl} alt={garage.bikePhotoDataUrls[0].name} className="h-48 w-full rounded-2xl border border-white/10 object-cover sm:col-span-2" />{garage.bikePhotoDataUrls.slice(1, 5).map((photo) => <img key={photo.name} src={photo.dataUrl} alt={photo.name} className="h-32 w-full rounded-2xl border border-white/10 object-cover" />)}</div> : <div className="mt-5 rounded-2xl border border-dashed border-white/15 bg-black/30 p-6 text-sm text-rr-chrome">No assigned bike images yet.</div>}
                 <div className="mt-5 rounded-2xl border border-white/10 bg-black/40 p-4 text-sm text-rr-silver">
                   <strong className="text-white">Bike:</strong> {garage?.year || "Year"} {garage?.make || "Make"} {garage?.model || "Model"}<br />
                   <strong className="text-white">Nickname:</strong> {garage?.bikeNickname || "Not set"}<br />
