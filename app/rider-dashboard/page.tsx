@@ -52,6 +52,18 @@ function getFileNames(form: FormData, fieldName: string) {
   return form.getAll(fieldName).filter((file): file is File => file instanceof File && Boolean(file.name)).map((file) => file.name);
 }
 
+function normalizeRiderSession(value: Partial<RiderSession> | null | undefined, fallbackName = "Rider", fallbackEmail = ""): RiderSession {
+  return {
+    riderName: value?.riderName || fallbackName,
+    email: value?.email || fallbackEmail,
+    phone: value?.phone || "",
+    ridingStyle: value?.ridingStyle || "Add your riding style",
+    motorcycle: value?.motorcycle || "Add your motorcycle",
+    availability: value?.availability || "Add your availability",
+    loginAt: value?.loginAt || new Date().toISOString()
+  };
+}
+
 export default function RiderDashboardPage() {
   const router = useRouter();
   const { isLoaded, isSignedIn, user } = useUser();
@@ -70,17 +82,14 @@ export default function RiderDashboardPage() {
     }
 
     if (storedSession) {
-      setSession(JSON.parse(storedSession));
+      try {
+        setSession(normalizeRiderSession(JSON.parse(storedSession)));
+      } catch {
+        localStorage.removeItem("rr_rider_session");
+        setSession(normalizeRiderSession(null, user?.fullName || user?.primaryEmailAddress?.emailAddress || "Rider", user?.primaryEmailAddress?.emailAddress || ""));
+      }
     } else if (user) {
-      setSession({
-        riderName: user.fullName || user.primaryEmailAddress?.emailAddress || "Rider",
-        email: user.primaryEmailAddress?.emailAddress || "",
-        phone: user.primaryPhoneNumber?.phoneNumber || "",
-        ridingStyle: "Add your riding style",
-        motorcycle: "Add your motorcycle",
-        availability: "Add your availability",
-        loginAt: new Date().toISOString()
-      });
+      setSession(normalizeRiderSession(null, user.fullName || user.primaryEmailAddress?.emailAddress || "Rider", user.primaryEmailAddress?.emailAddress || ""));
     }
 
     setRequests(getRequests());
@@ -99,7 +108,7 @@ export default function RiderDashboardPage() {
   function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const next: RiderSession = {
+    const next = normalizeRiderSession({
       riderName: String(form.get("riderName") || ""),
       email: String(form.get("email") || ""),
       phone: String(form.get("phone") || ""),
@@ -107,7 +116,7 @@ export default function RiderDashboardPage() {
       motorcycle: String(form.get("motorcycle") || ""),
       availability: String(form.get("availability") || ""),
       loginAt: session?.loginAt || new Date().toISOString()
-    };
+    });
     localStorage.setItem("rr_rider_session", JSON.stringify(next));
     setSession(next);
     setSaved(true);
@@ -144,6 +153,9 @@ export default function RiderDashboardPage() {
     return <main className="min-h-screen bg-rr-radial p-10 text-white">Loading rider portal...</main>;
   }
 
+  const riderName = session.riderName || "Rider";
+  const riderInitials = riderName.slice(0, 2).toUpperCase();
+
   return (
     <main className="min-h-screen bg-rr-radial text-white">
       <PrototypeNav />
@@ -151,7 +163,7 @@ export default function RiderDashboardPage() {
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
             <div className="text-xs uppercase tracking-[0.42em] text-rr-purple">Rider dashboard</div>
-            <h1 className="rr-metal-text mt-3 text-5xl font-black">Welcome, {session.riderName}</h1>
+            <h1 className="rr-metal-text mt-3 text-5xl font-black">Welcome, {riderName}</h1>
             <p className="mt-4 max-w-3xl text-rr-chrome">Review ride requests, manage your rider profile, and keep your motorcycle garage ready for passenger bookings.</p>
           </div>
           <SignOutButton redirectUrl="/rider-login">
@@ -173,7 +185,7 @@ export default function RiderDashboardPage() {
               <h2 className="mt-2 text-2xl font-black">Profile details</h2>
               {saved ? <div className="mt-4 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-100">Profile saved.</div> : null}
               <div className="mt-5 grid gap-4">
-                <label className={labelClass}>Rider name<input name="riderName" defaultValue={session.riderName} className={inputClass} required /></label>
+                <label className={labelClass}>Rider name<input name="riderName" defaultValue={riderName} className={inputClass} required /></label>
                 <label className={labelClass}>Email<input type="email" name="email" defaultValue={session.email} className={inputClass} required /></label>
                 <label className={labelClass}>Phone<input name="phone" defaultValue={session.phone} className={inputClass} /></label>
                 <label className={labelClass}>Riding style<input name="ridingStyle" defaultValue={session.ridingStyle} className={inputClass} /></label>
@@ -209,8 +221,8 @@ export default function RiderDashboardPage() {
               <h2 className="mt-2 text-2xl font-black">How the rider/bike profile appears</h2>
               <div className="mt-5 rounded-3xl border border-white/10 bg-black/30 p-5">
                 <div className="flex items-center gap-4">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full border border-rr-purple/40 bg-rr-purple/10 text-lg font-black">{garage?.profilePhotoName ? "IMG" : session.riderName.slice(0, 2).toUpperCase()}</div>
-                  <div><div className="text-xl font-black">{session.riderName}</div><div className="text-sm text-rr-chrome">{session.ridingStyle}</div></div>
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full border border-rr-purple/40 bg-rr-purple/10 text-lg font-black">{garage?.profilePhotoName ? "IMG" : riderInitials}</div>
+                  <div><div className="text-xl font-black">{riderName}</div><div className="text-sm text-rr-chrome">{session.ridingStyle}</div></div>
                 </div>
                 <div className="mt-5 rounded-2xl border border-white/10 bg-black/40 p-4 text-sm text-rr-silver">
                   <strong className="text-white">Bike:</strong> {garage?.year || "Year"} {garage?.make || "Make"} {garage?.model || "Model"}<br />
@@ -253,9 +265,9 @@ export default function RiderDashboardPage() {
                     <MockRouteMap pickup={request.pickupLocation} dropoff={request.dropoffLocation} compact />
                   </div>
                   <div className="mt-5 flex flex-wrap gap-2">
-                    <button onClick={() => updateRideStatus(index, `Accepted by ${session.riderName}`)} className="rounded-full bg-rr-purple px-4 py-2 text-sm">Accept ride</button>
-                    <button onClick={() => updateRideStatus(index, `Needs follow-up from ${session.riderName}`)} className="rounded-full border border-white/10 px-4 py-2 text-sm text-rr-silver">Ask follow-up</button>
-                    <button onClick={() => updateRideStatus(index, `Declined by ${session.riderName}`)} className="rounded-full border border-white/10 px-4 py-2 text-sm text-rr-silver">Decline</button>
+                    <button onClick={() => updateRideStatus(index, `Accepted by ${riderName}`)} className="rounded-full bg-rr-purple px-4 py-2 text-sm">Accept ride</button>
+                    <button onClick={() => updateRideStatus(index, `Needs follow-up from ${riderName}`)} className="rounded-full border border-white/10 px-4 py-2 text-sm text-rr-silver">Ask follow-up</button>
+                    <button onClick={() => updateRideStatus(index, `Declined by ${riderName}`)} className="rounded-full border border-white/10 px-4 py-2 text-sm text-rr-silver">Decline</button>
                   </div>
                 </article>
               ))}
