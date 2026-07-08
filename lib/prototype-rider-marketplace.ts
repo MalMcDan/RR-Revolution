@@ -16,6 +16,8 @@ export type ApprovedPrototypeRider = {
   applicationCreatedAt?: string;
   email?: string;
   phone?: string;
+  ownedBikeName?: string;
+  passengerSetup?: string;
 };
 
 type RiderGarage = {
@@ -26,6 +28,10 @@ type RiderGarage = {
   model?: string;
   passengerSetup?: string;
   comfortNotes?: string;
+};
+
+type RiderApplicationWithBike = RiderApplication & {
+  selectedInventoryBikeId?: string;
 };
 
 function safeParse<T>(value: string | null, fallback: T): T {
@@ -41,13 +47,48 @@ function slugify(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
+function normalize(value: string) {
+  return value.toLowerCase().replace(/motorcycle|motorrad|b\.o\.s\.s\.|limited|classic|tour|lt/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function findBestInventoryMatch(searchText: string) {
+  const normalizedSearch = normalize(searchText);
+  if (!normalizedSearch) return null;
+
+  const scored = motorcycleInventory.map((bike) => {
+    const makeWords = normalize(bike.make).split(" ").filter(Boolean);
+    const modelWords = normalize(bike.model).split(" ").filter(Boolean);
+    let score = 0;
+
+    for (const word of makeWords) {
+      if (normalizedSearch.includes(word)) score += 2;
+    }
+    for (const word of modelWords) {
+      if (normalizedSearch.includes(word)) score += 4;
+    }
+    if (normalizedSearch.includes(normalize(`${bike.make} ${bike.model}`))) score += 10;
+
+    return { bike, score };
+  }).sort((a, b) => b.score - a.score);
+
+  return scored[0]?.score > 0 ? scored[0].bike : null;
+}
+
 function inferBikeId(application: RiderApplication, garage?: RiderGarage | null) {
+  const app = application as RiderApplicationWithBike;
+
+  if (app.selectedInventoryBikeId) return app.selectedInventoryBikeId;
+
+  const garageText = `${garage?.year || ""} ${garage?.make || ""} ${garage?.model || ""}`;
+  const garageMatch = findBestInventoryMatch(garageText);
+  if (garageMatch) return garageMatch.id;
+
   if (garage?.selectedInventoryBikeId) return garage.selectedInventoryBikeId;
-  const searchText = `${application.motorcycle || ""} ${garage?.make || ""} ${garage?.model || ""}`.toLowerCase();
-  const match = motorcycleInventory.find((bike) => {
-    return searchText.includes(bike.make.toLowerCase().replace(" motorcycle", "")) && searchText.includes(bike.model.toLowerCase().split(" ")[0]);
-  });
-  return match?.id || motorcycleInventory[0].id;
+
+  const applicationMatch = findBestInventoryMatch(application.motorcycle || "");
+  if (applicationMatch) return applicationMatch.id;
+
+  return motorcycleInventory[0].id;
 }
 
 export function getStoredApprovedRiders() {
@@ -63,6 +104,8 @@ export function buildApprovedRiderFromApplication(application: RiderApplication,
   const bikeId = inferBikeId(application, garage);
   const bike = getBikeById(bikeId);
   const displayBike = garage?.year && garage?.make && garage?.model ? `${garage.year} ${garage.make} ${garage.model}` : `${bike.year} ${bike.make} ${bike.model}`;
+  const setup = garage?.passengerSetup || "admin-approved two-up setup on file";
+
   return {
     id: `approved-${slugify(application.email || application.riderName)}-${application.createdAt.replace(/[^0-9]/g, "")}`,
     name: application.riderName,
@@ -74,11 +117,13 @@ export function buildApprovedRiderFromApplication(application: RiderApplication,
     rating: "New",
     completedRides: 0,
     bikeIds: [bikeId],
-    bio: `${application.riderName} is approved for ${displayBike}. Passenger setup: ${garage?.passengerSetup || "admin-approved two-up setup on file"}.`,
+    bio: `${application.riderName} is approved for ${displayBike}. Passenger setup: ${setup}.`,
     source: "approved-application",
     applicationCreatedAt: application.createdAt,
     email: application.email,
-    phone: application.phone
+    phone: application.phone,
+    ownedBikeName: displayBike,
+    passengerSetup: setup
   };
 }
 
@@ -99,6 +144,20 @@ export function revokePrototypeRider(application: RiderApplication) {
     }
     return rider;
   });
+  saveStoredApprovedRiders(next);
+  return next;
+}
+
+export function restorePrototypeRider(riderId: string) {
+  const existing = getStoredApprovedRiders();
+  const next = existing.map((rider) => rider.id === riderId ? { ...rider, status: "Approved", accessStatus: "Active" } : rider);
+  saveStoredApprovedRiders(next);
+  return next;
+}
+
+export function revokePrototypeRiderById(riderId: string) {
+  const existing = getStoredApprovedRiders();
+  const next = existing.map((rider) => rider.id === riderId ? { ...rider, status: "Revoked", accessStatus: "Revoked" } : rider);
   saveStoredApprovedRiders(next);
   return next;
 }
