@@ -3,18 +3,27 @@
 import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton, useUser } from "@clerk/nextjs";
 import Link from "next/link";
 
+type AuthRole = "passenger" | "rider" | "admin";
+
 export function ClerkAccess({
+  role,
   roleLabel,
   dashboardPath,
   title,
   description
 }: {
+  role: AuthRole;
   roleLabel: string;
   dashboardPath: string;
   title: string;
   description: string;
 }) {
   const { user } = useUser();
+
+  function rememberRoleChoice() {
+    localStorage.setItem("rr_last_auth_role", role);
+    localStorage.setItem("rr_last_dashboard_path", dashboardPath);
+  }
 
   return (
     <section className="mx-auto max-w-4xl px-6 py-12">
@@ -30,10 +39,10 @@ export function ClerkAccess({
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <SignInButton mode="modal" forceRedirectUrl={dashboardPath}>
-              <button className="rounded-full bg-rr-purple px-6 py-3 font-semibold shadow-glow">Log in</button>
+              <button onClick={rememberRoleChoice} className="rounded-full bg-rr-purple px-6 py-3 font-semibold shadow-glow">Log in</button>
             </SignInButton>
             <SignUpButton mode="modal" forceRedirectUrl={dashboardPath}>
-              <button className="rounded-full border border-white/10 px-6 py-3 text-rr-silver hover:border-rr-purple/60">Create account</button>
+              <button onClick={rememberRoleChoice} className="rounded-full border border-white/10 px-6 py-3 text-rr-silver hover:border-rr-purple/60">Create account</button>
             </SignUpButton>
           </div>
         </div>
@@ -50,8 +59,8 @@ export function ClerkAccess({
             </div>
             <UserButton afterSignOutUrl="/" />
           </div>
-          <Link href={dashboardPath} className="mt-6 inline-flex rounded-full bg-rr-purple px-6 py-3 font-semibold shadow-glow">
-            Continue to dashboard
+          <Link href={dashboardPath} onClick={rememberRoleChoice} className="mt-6 inline-flex rounded-full bg-rr-purple px-6 py-3 font-semibold shadow-glow">
+            Continue to {roleLabel.toLowerCase()} dashboard
           </Link>
         </div>
       </SignedIn>
