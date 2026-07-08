@@ -11,5 +11,8 @@
     "start": "npm run start --workspace @rr/web",
     "lint": "npm run lint --workspace @rr/web",
     "typecheck": "npm run typecheck --workspace @rr/web"
+  },
+  "devDependencies": {
+    "@types/node": "20.17.6"
   }
 }
