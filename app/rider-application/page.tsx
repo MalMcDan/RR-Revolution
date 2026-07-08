@@ -14,6 +14,13 @@ function getUploadedFileName(form: FormData, fieldName: string) {
   return "";
 }
 
+function getUploadedFileNames(form: FormData, fieldName: string) {
+  return form
+    .getAll(fieldName)
+    .filter((file): file is File => file instanceof File && Boolean(file.name))
+    .map((file) => file.name);
+}
+
 export default function RiderApplicationPage() {
   const router = useRouter();
 
@@ -29,6 +36,7 @@ export default function RiderApplicationPage() {
       insurance: String(form.get("insurance") || ""),
       motorcycle: String(form.get("motorcycle") || ""),
       availability: String(form.get("availability") || ""),
+      motorcyclePhotoNames: getUploadedFileNames(form, "motorcyclePhotos"),
       idDocumentName: getUploadedFileName(form, "idDocument"),
       idExpirationDate: String(form.get("idExpirationDate") || ""),
       insuranceDocumentName: getUploadedFileName(form, "insuranceDocument"),
@@ -49,11 +57,18 @@ export default function RiderApplicationPage() {
       <section className="mx-auto max-w-5xl px-6 py-12">
         <div className="text-xs uppercase tracking-[0.42em] text-rr-purple">Rider flow</div>
         <h1 className="rr-metal-text mt-3 text-5xl font-black">Apply to ride with Ride Relax</h1>
-        <p className="mt-4 max-w-3xl text-rr-chrome">This prototype captures document uploads and expiration dates. Production will extract expiration dates from uploaded ID and insurance images using backend OCR/document intelligence.</p>
+        <p className="mt-4 max-w-3xl text-rr-chrome">This prototype captures motorcycle photos, document uploads, and expiration dates. Production will store images in cloud storage and extract expiration dates using backend OCR/document intelligence.</p>
         <form onSubmit={submitApplication} className="rr-card mt-8 grid gap-6 rounded-[2rem] p-8">
           <div className="grid gap-5 md:grid-cols-2"><label className={labelClass}>Rider name<input name="riderName" required className={inputClass} /></label><label className={labelClass}>Email<input type="email" name="email" required className={inputClass} /></label></div>
           <div className="grid gap-5 md:grid-cols-2"><label className={labelClass}>Phone<input name="phone" required className={inputClass} /></label><label className={labelClass}>Years riding<input name="yearsRiding" required className={inputClass} placeholder="8 years" /></label></div>
           <div className="grid gap-5 md:grid-cols-2"><label className={labelClass}>Motorcycle endorsement<select name="endorsement" required className={inputClass}><option>Current motorcycle endorsement</option><option>Permit only</option><option>Needs review</option></select></label><label className={labelClass}>Insurance<select name="insurance" required className={inputClass}><option>Current insurance</option><option>Will upload proof</option><option>Needs review</option></select></label></div>
+
+          <div className="rounded-[1.5rem] border border-white/10 bg-black/25 p-5">
+            <div className="text-xs uppercase tracking-[0.32em] text-rr-purple">Motorcycle photos</div>
+            <h2 className="mt-2 text-2xl font-black">Upload bike images</h2>
+            <p className="mt-2 text-sm leading-6 text-rr-chrome">Add photos for the passenger-facing motorcycle profile. Recommended: front, side, passenger seat/backrest, luggage/storage, and any special features. The prototype stores file names only.</p>
+            <label className={`${labelClass} mt-5 block`}>Motorcycle photo gallery<input type="file" name="motorcyclePhotos" accept="image/*" multiple className={inputClass} /></label>
+          </div>
 
           <div className="rounded-[1.5rem] border border-rr-purple/30 bg-rr-purple/5 p-5">
             <div className="text-xs uppercase tracking-[0.32em] text-rr-purple">Compliance documents</div>

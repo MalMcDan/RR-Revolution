@@ -92,6 +92,7 @@ export type RiderApplication = {
   insurance: string;
   motorcycle: string;
   availability: string;
+  motorcyclePhotoNames: string[];
   idDocumentName: string;
   idExpirationDate: string;
   insuranceDocumentName: string;
