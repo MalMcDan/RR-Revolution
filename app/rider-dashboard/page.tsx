@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { SignOutButton, useUser } from "@clerk/nextjs";
 import { PrototypeNav } from "../../components/prototype-nav";
 import { MockRouteMap } from "../../components/mock-route-map";
 import { motorcycleInventory, type RideRequest } from "../../lib/prototype-data";
@@ -53,6 +54,7 @@ function getFileNames(form: FormData, fieldName: string) {
 
 export default function RiderDashboardPage() {
   const router = useRouter();
+  const { isLoaded, isSignedIn, user } = useUser();
   const [session, setSession] = useState<RiderSession | null>(null);
   const [requests, setRequests] = useState<RideRequest[]>([]);
   const [saved, setSaved] = useState(false);
@@ -60,15 +62,30 @@ export default function RiderDashboardPage() {
   const [garage, setGarage] = useState<RiderGarage | null>(null);
 
   useEffect(() => {
+    if (!isLoaded) return;
     const storedSession = localStorage.getItem("rr_rider_session");
-    if (!storedSession) {
+    if (!isSignedIn && !storedSession) {
       router.push("/rider-login");
       return;
     }
-    setSession(JSON.parse(storedSession));
+
+    if (storedSession) {
+      setSession(JSON.parse(storedSession));
+    } else if (user) {
+      setSession({
+        riderName: user.fullName || user.primaryEmailAddress?.emailAddress || "Rider",
+        email: user.primaryEmailAddress?.emailAddress || "",
+        phone: user.primaryPhoneNumber?.phoneNumber || "",
+        ridingStyle: "Add your riding style",
+        motorcycle: "Add your motorcycle",
+        availability: "Add your availability",
+        loginAt: new Date().toISOString()
+      });
+    }
+
     setRequests(getRequests());
     setGarage(JSON.parse(localStorage.getItem("rr_rider_garage") || "null"));
-  }, [router]);
+  }, [isLoaded, isSignedIn, router, user]);
 
   const openRequests = useMemo(() => requests.filter((request) => !request.status.toLowerCase().includes("accepted") && !request.status.toLowerCase().includes("declined")), [requests]);
   const acceptedRequests = useMemo(() => requests.filter((request) => request.status.toLowerCase().includes("accepted")), [requests]);
@@ -123,11 +140,6 @@ export default function RiderDashboardPage() {
     window.setTimeout(() => setGarageSaved(false), 2500);
   }
 
-  function logout() {
-    localStorage.removeItem("rr_rider_session");
-    router.push("/rider-login");
-  }
-
   if (!session) {
     return <main className="min-h-screen bg-rr-radial p-10 text-white">Loading rider portal...</main>;
   }
@@ -142,7 +154,9 @@ export default function RiderDashboardPage() {
             <h1 className="rr-metal-text mt-3 text-5xl font-black">Welcome, {session.riderName}</h1>
             <p className="mt-4 max-w-3xl text-rr-chrome">Review ride requests, manage your rider profile, and keep your motorcycle garage ready for passenger bookings.</p>
           </div>
-          <button onClick={logout} className="rounded-full border border-white/10 px-5 py-3 text-sm text-rr-silver hover:border-rr-purple/60">Log out</button>
+          <SignOutButton redirectUrl="/rider-login">
+            <button className="rounded-full border border-white/10 px-5 py-3 text-sm text-rr-silver hover:border-rr-purple/60">Log out</button>
+          </SignOutButton>
         </div>
 
         <div className="mt-8 grid gap-4 md:grid-cols-4">
