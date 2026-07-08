@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SignOutButton, useUser } from "@clerk/nextjs";
 import { PrototypeNav } from "../../components/prototype-nav";
@@ -91,6 +91,19 @@ function normalizeRiderSession(value: Partial<RiderSession> | null | undefined, 
   };
 }
 
+function saveGarageToLocalStorage(next: RiderGarage) {
+  try {
+    localStorage.setItem("rr_rider_garage", JSON.stringify(next));
+  } catch {
+    const lightweight: RiderGarage = {
+      ...next,
+      profilePhotoDataUrl: "",
+      bikePhotoDataUrls: []
+    };
+    localStorage.setItem("rr_rider_garage", JSON.stringify(lightweight));
+  }
+}
+
 export default function RiderDashboardPage() {
   const router = useRouter();
   const { isLoaded, isSignedIn, user } = useUser();
@@ -99,6 +112,8 @@ export default function RiderDashboardPage() {
   const [saved, setSaved] = useState(false);
   const [garageSaved, setGarageSaved] = useState(false);
   const [garage, setGarage] = useState<RiderGarage | null>(null);
+  const [profilePreview, setProfilePreview] = useState<StoredImage | null>(null);
+  const [bikePreviews, setBikePreviews] = useState<StoredImage[]>([]);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -125,6 +140,21 @@ export default function RiderDashboardPage() {
 
   const openRequests = useMemo(() => requests.filter((request) => !request.status.toLowerCase().includes("accepted") && !request.status.toLowerCase().includes("declined")), [requests]);
   const acceptedRequests = useMemo(() => requests.filter((request) => request.status.toLowerCase().includes("accepted")), [requests]);
+
+  async function handleProfileImageChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      setProfilePreview(null);
+      return;
+    }
+    setProfilePreview({ name: file.name, dataUrl: await readFileAsDataUrl(file) });
+  }
+
+  async function handleBikeImagesChange(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files || []);
+    const previews = await Promise.all(files.map(async (file) => ({ name: file.name, dataUrl: await readFileAsDataUrl(file) })));
+    setBikePreviews(previews);
+  }
 
   function updateRideStatus(index: number, status: string) {
     const next = requests.map((request, requestIndex) => requestIndex === index ? { ...request, status } : request);
@@ -155,12 +185,13 @@ export default function RiderDashboardPage() {
     const form = new FormData(event.currentTarget);
     const selectedInventoryBikeId = String(form.get("selectedInventoryBikeId") || motorcycleInventory[0].id);
     const selectedBike = motorcycleInventory.find((bike) => bike.id === selectedInventoryBikeId) || motorcycleInventory[0];
-    const profilePhotoName = getFileName(form, "profilePhoto") || garage?.profilePhotoName || "";
-    const uploadedBikePhotoNames = getFileNames(form, "bikePhotos");
+    const profilePhotoName = profilePreview?.name || getFileName(form, "profilePhoto") || garage?.profilePhotoName || "";
+    const uploadedBikePhotoNames = bikePreviews.length > 0 ? bikePreviews.map((photo) => photo.name) : getFileNames(form, "bikePhotos");
     const bikePhotoNames = uploadedBikePhotoNames.length > 0 ? uploadedBikePhotoNames : garage?.bikePhotoNames || [];
-    const profilePhotoDataUrl = await getImageDataUrl(form, "profilePhoto") || garage?.profilePhotoDataUrl || "";
-    const uploadedBikePhotoDataUrls = await getImageDataUrls(form, "bikePhotos");
-    const bikePhotoDataUrls = uploadedBikePhotoDataUrls.length > 0 ? uploadedBikePhotoDataUrls : garage?.bikePhotoDataUrls || [];
+    const formProfileDataUrl = profilePreview?.dataUrl || await getImageDataUrl(form, "profilePhoto");
+    const profilePhotoDataUrl = formProfileDataUrl || garage?.profilePhotoDataUrl || "";
+    const formBikeDataUrls = bikePreviews.length > 0 ? bikePreviews : await getImageDataUrls(form, "bikePhotos");
+    const bikePhotoDataUrls = formBikeDataUrls.length > 0 ? formBikeDataUrls : garage?.bikePhotoDataUrls || [];
 
     const next: RiderGarage = {
       profilePhotoName,
@@ -176,8 +207,8 @@ export default function RiderDashboardPage() {
       bikePhotoDataUrls,
       updatedAt: new Date().toISOString()
     };
-    localStorage.setItem("rr_rider_garage", JSON.stringify(next));
     setGarage(next);
+    saveGarageToLocalStorage(next);
     setGarageSaved(true);
     window.setTimeout(() => setGarageSaved(false), 2500);
   }
@@ -188,6 +219,8 @@ export default function RiderDashboardPage() {
 
   const riderName = session.riderName || "Rider";
   const riderInitials = riderName.slice(0, 2).toUpperCase();
+  const displayProfileImage = profilePreview?.dataUrl || garage?.profilePhotoDataUrl || "";
+  const displayBikeImages = bikePreviews.length > 0 ? bikePreviews : garage?.bikePhotoDataUrls || [];
 
   return (
     <main className="min-h-screen bg-rr-radial text-white">
@@ -207,7 +240,7 @@ export default function RiderDashboardPage() {
         <div className="mt-8 grid gap-4 md:grid-cols-4">
           <div className="rr-card rounded-3xl p-6"><div className="text-sm text-rr-chrome">Open ride requests</div><div className="mt-2 text-4xl font-black">{openRequests.length}</div></div>
           <div className="rr-card rounded-3xl p-6"><div className="text-sm text-rr-chrome">Accepted rides</div><div className="mt-2 text-4xl font-black">{acceptedRequests.length}</div></div>
-          <div className="rr-card rounded-3xl p-6"><div className="text-sm text-rr-chrome">Garage photos</div><div className="mt-2 text-4xl font-black">{garage?.bikePhotoNames?.length || 0}</div></div>
+          <div className="rr-card rounded-3xl p-6"><div className="text-sm text-rr-chrome">Garage photos</div><div className="mt-2 text-4xl font-black">{displayBikeImages.length}</div></div>
           <Link href="/request" className="rr-card rounded-3xl p-6 text-rr-silver hover:border-rr-purple/60">Create test passenger request</Link>
         </div>
 
@@ -231,10 +264,11 @@ export default function RiderDashboardPage() {
             <form onSubmit={saveGarage} className="rr-card rounded-[2rem] p-7">
               <div className="text-xs uppercase tracking-[0.34em] text-rr-purple">Rider garage</div>
               <h2 className="mt-2 text-2xl font-black">Bike inventory and photos</h2>
-              <p className="mt-2 text-sm leading-6 text-rr-chrome">Select the closest inventory model, add your exact bike details, upload your profile picture, and upload photos of your own motorcycle. Images are now assigned to this rider profile locally; Supabase Storage is the next persistence step.</p>
+              <p className="mt-2 text-sm leading-6 text-rr-chrome">Image previews appear immediately when selected. Save garage assigns them to the rider/bike profile. Supabase Storage is the next persistence step.</p>
               {garageSaved ? <div className="mt-4 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-100">Garage saved and images assigned.</div> : null}
               <div className="mt-5 grid gap-4">
-                <label className={labelClass}>Profile picture<input type="file" name="profilePhoto" accept="image/*" className={inputClass} /></label>
+                <label className={labelClass}>Profile picture<input type="file" name="profilePhoto" accept="image/*" onChange={handleProfileImageChange} className={inputClass} /></label>
+                {profilePreview ? <img src={profilePreview.dataUrl} alt={profilePreview.name} className="h-24 w-24 rounded-full border border-rr-purple/40 object-cover" /> : null}
                 <label className={labelClass}>Inventory model<select name="selectedInventoryBikeId" defaultValue={garage?.selectedInventoryBikeId || motorcycleInventory[0].id} className={inputClass}>{motorcycleInventory.map((bike) => <option key={bike.id} value={bike.id}>{bike.make} {bike.model}</option>)}</select></label>
                 <label className={labelClass}>Bike nickname<input name="bikeNickname" defaultValue={garage?.bikeNickname || ""} className={inputClass} placeholder="The couch rocket, Big Red, etc." /></label>
                 <div className="grid gap-4 md:grid-cols-3">
@@ -244,7 +278,8 @@ export default function RiderDashboardPage() {
                 </div>
                 <label className={labelClass}>Passenger setup<textarea name="passengerSetup" defaultValue={garage?.passengerSetup || ""} rows={3} className={inputClass} placeholder="Passenger seat, pegs, backrest, floorboards, trunk, comms, luggage..." /></label>
                 <label className={labelClass}>Passenger comfort notes<textarea name="comfortNotes" defaultValue={garage?.comfortNotes || ""} rows={3} className={inputClass} placeholder="Best for short rides, long rides, nervous first-time passengers, taller passengers..." /></label>
-                <label className={labelClass}>Upload bike photos<input type="file" name="bikePhotos" accept="image/*" multiple className={inputClass} /></label>
+                <label className={labelClass}>Upload bike photos<input type="file" name="bikePhotos" accept="image/*" multiple onChange={handleBikeImagesChange} className={inputClass} /></label>
+                {bikePreviews.length > 0 ? <div className="grid gap-3 sm:grid-cols-2">{bikePreviews.slice(0, 4).map((photo) => <img key={photo.name} src={photo.dataUrl} alt={photo.name} className="h-32 w-full rounded-2xl border border-white/10 object-cover" />)}</div> : null}
                 <button className="rounded-full bg-rr-purple px-6 py-3 font-semibold shadow-glow">Save garage</button>
               </div>
             </form>
@@ -254,10 +289,10 @@ export default function RiderDashboardPage() {
               <h2 className="mt-2 text-2xl font-black">How the rider/bike profile appears</h2>
               <div className="mt-5 rounded-3xl border border-white/10 bg-black/30 p-5">
                 <div className="flex items-center gap-4">
-                  {garage?.profilePhotoDataUrl ? <img src={garage.profilePhotoDataUrl} alt={`${riderName} profile`} className="h-16 w-16 rounded-full border border-rr-purple/40 object-cover" /> : <div className="flex h-16 w-16 items-center justify-center rounded-full border border-rr-purple/40 bg-rr-purple/10 text-lg font-black">{riderInitials}</div>}
+                  {displayProfileImage ? <img src={displayProfileImage} alt={`${riderName} profile`} className="h-16 w-16 rounded-full border border-rr-purple/40 object-cover" /> : <div className="flex h-16 w-16 items-center justify-center rounded-full border border-rr-purple/40 bg-rr-purple/10 text-lg font-black">{riderInitials}</div>}
                   <div><div className="text-xl font-black">{riderName}</div><div className="text-sm text-rr-chrome">{session.ridingStyle}</div></div>
                 </div>
-                {garage?.bikePhotoDataUrls?.length ? <div className="mt-5 grid gap-3 sm:grid-cols-2"><img src={garage.bikePhotoDataUrls[0].dataUrl} alt={garage.bikePhotoDataUrls[0].name} className="h-48 w-full rounded-2xl border border-white/10 object-cover sm:col-span-2" />{garage.bikePhotoDataUrls.slice(1, 5).map((photo) => <img key={photo.name} src={photo.dataUrl} alt={photo.name} className="h-32 w-full rounded-2xl border border-white/10 object-cover" />)}</div> : <div className="mt-5 rounded-2xl border border-dashed border-white/15 bg-black/30 p-6 text-sm text-rr-chrome">No assigned bike images yet.</div>}
+                {displayBikeImages.length > 0 ? <div className="mt-5 grid gap-3 sm:grid-cols-2"><img src={displayBikeImages[0].dataUrl} alt={displayBikeImages[0].name} className="h-48 w-full rounded-2xl border border-white/10 object-cover sm:col-span-2" />{displayBikeImages.slice(1, 5).map((photo) => <img key={photo.name} src={photo.dataUrl} alt={photo.name} className="h-32 w-full rounded-2xl border border-white/10 object-cover" />)}</div> : <div className="mt-5 rounded-2xl border border-dashed border-white/15 bg-black/30 p-6 text-sm text-rr-chrome">No assigned bike images yet.</div>}
                 <div className="mt-5 rounded-2xl border border-white/10 bg-black/40 p-4 text-sm text-rr-silver">
                   <strong className="text-white">Bike:</strong> {garage?.year || "Year"} {garage?.make || "Make"} {garage?.model || "Model"}<br />
                   <strong className="text-white">Nickname:</strong> {garage?.bikeNickname || "Not set"}<br />
