@@ -21,7 +21,7 @@ export default function HomePage() {
               <span className="rr-metal-text font-serif text-2xl font-black tracking-[-0.12em]">RR</span>
             </div>
             <div>
-              <div className="text-sm font-semibold uppercase tracking-[0.32em] text-rr-silver">Road Rider</div>
+              <div className="text-sm font-semibold uppercase tracking-[0.32em] text-rr-silver">Ride Relax</div>
               <div className="text-xs text-rr-chrome/70">Curated motorcycle experiences</div>
             </div>
           </Link>
@@ -32,15 +32,15 @@ export default function HomePage() {
       <section className="mx-auto grid max-w-7xl gap-12 px-6 py-16 lg:grid-cols-[0.95fr_1.05fr] lg:py-24">
         <div className="flex flex-col justify-center">
           <div className="mb-5 inline-flex w-fit rounded-full border border-rr-purple/40 bg-rr-purple/10 px-4 py-2 text-sm text-rr-violet shadow-glow">Hampton Roads motorcycle experiences</div>
-          <h1 className="rr-metal-text max-w-4xl text-5xl font-black leading-[0.95] tracking-tight md:text-7xl">Curated motorcycle rides, built for trust.</h1>
-          <p className="mt-6 max-w-2xl text-lg leading-8 text-rr-chrome">Road Rider is a scheduled motorcycle experience marketplace. Browse approved riders, choose the bike, pick the experience, acknowledge safety requirements, and request a ride that gets accepted manually.</p>
+          <h1 className="rr-metal-text max-w-4xl text-5xl font-black leading-[0.95] tracking-tight md:text-7xl">Ride Relax: curated motorcycle experiences, built for trust.</h1>
+          <p className="mt-6 max-w-2xl text-lg leading-8 text-rr-chrome">RR stands for Ride Relax: a scheduled motorcycle experience marketplace where passengers browse approved riders, choose the bike, pick the experience, acknowledge safety requirements, and request a ride that gets accepted manually.</p>
           <div className="mt-9 flex flex-col gap-3 sm:flex-row">
             <Link href="#schedule" className="rounded-full bg-rr-purple px-6 py-3 text-center font-semibold shadow-glow">Request a ride</Link>
             <Link href="#rider" className="rounded-full border border-rr-chrome/30 px-6 py-3 text-center font-semibold text-rr-silver">Become a rider</Link>
           </div>
         </div>
         <div className="rr-card overflow-hidden rounded-[2rem] p-4">
-          <img src="/brand/rr-primary-logo.svg" alt="RR motorcycle logo with chrome Gothic letters, wings, and purple lightning exhaust" className="w-full rounded-[1.5rem] object-cover shadow-chrome" />
+          <img src="/brand/rr-primary-logo.svg" alt="Ride Relax motorcycle logo with chrome Gothic RR letters, wings, and purple lightning exhaust" className="w-full rounded-[1.5rem] object-cover shadow-chrome" />
         </div>
       </section>
 
