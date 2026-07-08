@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PrototypeNav } from "../../components/prototype-nav";
 import { MockRouteMap } from "../../components/mock-route-map";
-import { estimateRoute, experiences, getBikeById, getRidersForBike, motorcycleInventory, riderProfiles, type PassengerRelease, type RideRequest } from "../../lib/prototype-data";
+import { estimateRoute, experiences, getBikeById, motorcycleInventory, type PassengerRelease, type RideRequest } from "../../lib/prototype-data";
+import { getApprovedPrototypeRidersForBike, type ApprovedPrototypeRider } from "../../lib/prototype-rider-marketplace";
 
 const inputClass = "mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-white outline-none focus:border-rr-purple";
 const labelClass = "text-sm font-medium text-rr-silver";
@@ -16,15 +17,21 @@ export default function RequestPage() {
   const [pickupPreview, setPickupPreview] = useState("Downtown Norfolk, VA");
   const [dropoffPreview, setDropoffPreview] = useState("Virginia Beach Oceanfront");
   const [selectedBikeId, setSelectedBikeId] = useState(motorcycleInventory[0].id);
-  const matchedRiders = useMemo(() => getRidersForBike(selectedBikeId), [selectedBikeId]);
-  const [selectedRiderId, setSelectedRiderId] = useState(matchedRiders[0]?.id || riderProfiles[0].id);
+  const [matchedRiders, setMatchedRiders] = useState<ApprovedPrototypeRider[]>([]);
+  const [selectedRiderId, setSelectedRiderId] = useState("");
   const router = useRouter();
+
+  useEffect(() => {
+    const riders = getApprovedPrototypeRidersForBike(selectedBikeId);
+    setMatchedRiders(riders);
+    setSelectedRiderId((current) => riders.some((rider) => rider.id === current) ? current : riders[0]?.id || "");
+  }, [selectedBikeId]);
 
   function chooseBike(bikeId: string) {
     setSelectedBikeId(bikeId);
-    const firstMatchedRider = getRidersForBike(bikeId)[0];
-    if (firstMatchedRider) setSelectedRiderId(firstMatchedRider.id);
   }
+
+  const selectedBike = useMemo(() => getBikeById(selectedBikeId), [selectedBikeId]);
 
   function submitRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -41,11 +48,11 @@ export default function RequestPage() {
     const bikeId = String(form.get("selectedBikeId") || selectedBikeId);
     const riderId = String(form.get("selectedRiderId") || selectedRiderId);
     const selectedBike = getBikeById(bikeId);
-    const selectedRider = riderProfiles.find((rider) => rider.id === riderId);
+    const selectedRider = matchedRiders.find((rider) => rider.id === riderId);
     const routeEstimate = estimateRoute(pickupLocation, dropoffLocation, duration);
 
     if (!selectedRider) {
-      setError("Please choose an approved rider for the selected bike.");
+      setError("Please choose an approved rider for the selected bike. If you just approved a rider in Admin, refresh this request page and select the rider's approved bike.");
       return;
     }
 
@@ -105,15 +112,13 @@ export default function RequestPage() {
     router.push("/confirmation");
   }
 
-  const selectedBike = getBikeById(selectedBikeId);
-
   return (
     <main className="min-h-screen bg-rr-radial text-white">
       <PrototypeNav />
       <section className="mx-auto max-w-6xl px-6 py-12">
         <div className="text-xs uppercase tracking-[0.42em] text-rr-purple">Passenger flow</div>
         <h1 className="rr-metal-text mt-3 text-5xl font-black">Request a scheduled ride</h1>
-        <p className="mt-4 max-w-3xl text-rr-chrome">Choose pickup and drop-off points, choose a real motorcycle model, select an approved rider matched to that bike, sign the release, and submit the request.</p>
+        <p className="mt-4 max-w-3xl text-rr-chrome">Choose pickup and drop-off points, choose a motorcycle model, select an approved rider matched to that bike, sign the release, and submit the request.</p>
 
         {error ? <div className="mt-6 rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-red-100">{error}</div> : null}
 
@@ -131,8 +136,8 @@ export default function RequestPage() {
               <h2 className="mt-2 text-2xl font-black">Pickup and drop-off</h2>
               <p className="mt-2 text-sm leading-6 text-rr-chrome">Production will use Mapbox/Google Maps autocomplete and routing. This prototype saves typed locations and shows a mock route layer.</p>
               <div className="mt-5 grid gap-5 md:grid-cols-2">
-                <label className={labelClass}>Pickup location<input name="pickupLocation" required className={inputClass} placeholder="Address, landmark, or area" defaultValue={pickupPreview} onChange={(event) => setPickupPreview(event.currentTarget.value)} /></label>
-                <label className={labelClass}>Drop-off location<input name="dropoffLocation" required className={inputClass} placeholder="Address, landmark, or area" defaultValue={dropoffPreview} onChange={(event) => setDropoffPreview(event.currentTarget.value)} /></label>
+                <label className={labelClass}>Pickup location<input name="pickupLocation" required className={inputClass} defaultValue={pickupPreview} onChange={(event) => setPickupPreview(event.currentTarget.value)} /></label>
+                <label className={labelClass}>Drop-off location<input name="dropoffLocation" required className={inputClass} defaultValue={dropoffPreview} onChange={(event) => setDropoffPreview(event.currentTarget.value)} /></label>
               </div>
               <div className="mt-5 grid gap-5 md:grid-cols-2">
                 <label className={labelClass}>Route preference<select name="routePreference" required className={inputClass}><option>Scenic / relaxed route</option><option>Fastest safe route</option><option>Avoid highways</option><option>Coastal / water views if possible</option><option>Rider recommendation</option></select></label>
@@ -143,7 +148,7 @@ export default function RequestPage() {
             <section className="rounded-[1.5rem] border border-white/10 bg-black/20 p-5">
               <div className="text-xs uppercase tracking-[0.32em] text-rr-purple">Step 1</div>
               <h2 className="mt-2 text-2xl font-black">Choose a motorcycle</h2>
-              <p className="mt-2 text-sm leading-6 text-rr-chrome">These are real motorcycle models pulled into the prototype from vendor pages. Official product photos should be wired through licensed/source-approved image storage before launch.</p>
+              <p className="mt-2 text-sm leading-6 text-rr-chrome">A rider only appears in the next step if Admin approved them for the bike model selected here.</p>
               <input type="hidden" name="selectedBikeId" value={selectedBikeId} />
               <div className="mt-5 grid gap-4">
                 {motorcycleInventory.map((bike) => {
@@ -166,14 +171,15 @@ export default function RequestPage() {
             <section className="rounded-[1.5rem] border border-white/10 bg-black/20 p-5">
               <div className="text-xs uppercase tracking-[0.32em] text-rr-purple">Step 2</div>
               <h2 className="mt-2 text-2xl font-black">Choose an approved rider</h2>
-              <p className="mt-2 text-sm leading-6 text-rr-chrome">Only riders approved for the selected {selectedBike.make} {selectedBike.model} are shown.</p>
+              <p className="mt-2 text-sm leading-6 text-rr-chrome">Only active riders approved for the selected {selectedBike.make} {selectedBike.model} are shown.</p>
               <input type="hidden" name="selectedRiderId" value={selectedRiderId} />
               <div className="mt-5 grid gap-4">
+                {matchedRiders.length === 0 ? <div className="rounded-3xl border border-yellow-500/30 bg-yellow-500/10 p-5 text-sm text-yellow-100">No approved active riders for this bike yet. Approve a rider from Admin, make sure their garage inventory model matches this bike, then refresh this page.</div> : null}
                 {matchedRiders.map((rider) => {
                   const checked = selectedRiderId === rider.id;
                   return (
                     <button key={rider.id} type="button" onClick={() => setSelectedRiderId(rider.id)} className={`rounded-3xl border p-5 text-left transition ${checked ? "border-rr-purple bg-rr-purple/10 shadow-glow" : "border-white/10 bg-black/20 hover:border-rr-purple/50"}`}>
-                      <div className="text-xs uppercase tracking-[0.25em] text-rr-purple">{rider.status} · {rider.rating} stars · {rider.completedRides} rides</div>
+                      <div className="text-xs uppercase tracking-[0.25em] text-rr-purple">{rider.source === "approved-application" ? "New approved rider" : rider.status} · {rider.rating} stars · {rider.completedRides} rides</div>
                       <h3 className="mt-3 text-2xl font-black">{rider.name}</h3>
                       <p className="mt-2 text-sm text-rr-chrome">{rider.years} · {rider.homeArea}</p>
                       <p className="mt-2 text-sm text-rr-silver">{rider.bio}</p>
@@ -235,7 +241,8 @@ export default function RequestPage() {
             </div>
             <div className="rr-card rounded-[2rem] p-6">
               <div className="text-xs uppercase tracking-[0.28em] text-rr-purple">Matched riders</div>
-              <p className="mt-2 text-sm leading-6 text-rr-chrome">{matchedRiders.length} approved rider(s) can fulfill requests for this bike.</p>
+              <p className="mt-2 text-sm leading-6 text-rr-chrome">{matchedRiders.length} approved active rider(s) can fulfill requests for this bike.</p>
+              {matchedRiders.length > 0 ? <div className="mt-4 grid gap-2 text-sm text-rr-silver">{matchedRiders.map((rider) => <div key={rider.id} className="rounded-2xl border border-white/10 bg-black/30 p-3">{rider.name}</div>)}</div> : null}
             </div>
           </aside>
         </form>
