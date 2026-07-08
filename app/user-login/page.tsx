@@ -1,0 +1,11 @@
+import { PrototypeNav } from "../../components/prototype-nav";
+import { AccountAccess } from "../../components/account-access";
+
+export default function UserLoginPage() {
+  return (
+    <main className="min-h-screen bg-rr-radial text-white">
+      <PrototypeNav />
+      <AccountAccess role="user" dashboardPath="/user-dashboard" title="User account" description="Create or log into a passenger account to request rides and see your ride history." />
+    </main>
+  );
+}
