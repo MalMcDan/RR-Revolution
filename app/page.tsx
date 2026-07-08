@@ -18,7 +18,7 @@ export default function HomePage() {
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <Link href="/" className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-rr-chrome/20 bg-black/60 p-1 shadow-glow">
-              <img src="/brand/rr-monogram.svg" alt="Ride Relax RR monogram" className="h-full w-full object-contain" />
+              <img src="/brand/rr-monogram.png" alt="Ride Relax RR monogram" className="h-full w-full object-contain" />
             </div>
             <div>
               <div className="text-sm font-semibold uppercase tracking-[0.32em] text-rr-silver">Ride Relax</div>
