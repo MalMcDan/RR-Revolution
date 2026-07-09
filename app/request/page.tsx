@@ -5,8 +5,10 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PrototypeNav } from "../../components/prototype-nav";
 import { MockRouteMap } from "../../components/mock-route-map";
+import { ProcessStepper } from "../../components/process-stepper";
 import { estimateRoute, experiences, getBikeById, motorcycleInventory, type PassengerRelease, type RideRequest } from "../../lib/prototype-data";
 import { getApprovedPrototypeRidersForBike, type ApprovedPrototypeRider } from "../../lib/prototype-rider-marketplace";
+import { passengerReservationSteps, setPortalIntent } from "../../lib/prototype-portal";
 
 const inputClass = "mt-2 w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-white outline-none focus:border-rr-purple";
 const labelClass = "text-sm font-medium text-rr-silver";
@@ -17,8 +19,19 @@ function RiderAvatar({ rider }: { rider: ApprovedPrototypeRider }) {
   return rider.profilePhotoUrl ? <img src={rider.profilePhotoUrl} alt={`${rider.name} profile`} className="h-16 w-16 rounded-full border border-rr-purple/40 object-cover" /> : <div className="flex h-16 w-16 items-center justify-center rounded-full border border-rr-purple/40 bg-rr-purple/10 text-lg font-black">{initials}</div>;
 }
 
+function StepControls({ step, setStep }: { step: number; setStep: (step: number) => void }) {
+  const isLast = step === passengerReservationSteps.length - 1;
+  return (
+    <div className="mt-8 flex flex-wrap gap-3">
+      {step > 0 ? <button type="button" onClick={() => setStep(step - 1)} className="rounded-full border border-white/10 px-6 py-3 text-rr-silver">Back</button> : null}
+      {!isLast ? <button type="button" onClick={() => setStep(step + 1)} className="rounded-full bg-rr-purple px-6 py-3 font-semibold shadow-glow">Continue</button> : <button className="rounded-full bg-rr-purple px-6 py-3 font-semibold shadow-glow">Submit ride request</button>}
+    </div>
+  );
+}
+
 export default function RequestPage() {
   const [error, setError] = useState("");
+  const [reservationStep, setReservationStep] = useState(0);
   const [pickupPreview, setPickupPreview] = useState("Downtown Norfolk, VA");
   const [dropoffPreview, setDropoffPreview] = useState("Virginia Beach Oceanfront");
   const [selectedBikeId, setSelectedBikeId] = useState(motorcycleInventory[0].id);
@@ -27,14 +40,14 @@ export default function RequestPage() {
   const router = useRouter();
 
   useEffect(() => {
+    setPortalIntent("passenger");
+  }, []);
+
+  useEffect(() => {
     const riders = getApprovedPrototypeRidersForBike(selectedBikeId);
     setMatchedRiders(riders);
     setSelectedRiderId((current) => riders.some((rider) => rider.id === current) ? current : riders[0]?.id || "");
   }, [selectedBikeId]);
-
-  function chooseBike(bikeId: string) {
-    setSelectedBikeId(bikeId);
-  }
 
   const selectedBike = useMemo(() => getBikeById(selectedBikeId), [selectedBikeId]);
   const selectedRider = useMemo(() => matchedRiders.find((rider) => rider.id === selectedRiderId), [matchedRiders, selectedRiderId]);
@@ -58,16 +71,17 @@ export default function RequestPage() {
     const routeEstimate = estimateRoute(pickupLocation, dropoffLocation, duration);
 
     if (!selectedRider) {
+      setReservationStep(3);
       setError("Please choose an approved rider for the selected bike. If you just approved a rider in Admin, refresh this request page and select the rider's approved bike.");
       return;
     }
-
     if (!safetyAccepted || missingReleaseCheck) {
+      setReservationStep(5);
       setError("All required safety and legal release acknowledgments must be checked before submitting a ride request.");
       return;
     }
-
     if (signature.trim().toLowerCase() !== passengerName.trim().toLowerCase()) {
+      setReservationStep(5);
       setError("The electronic signature must match the passenger name exactly for this prototype release.");
       return;
     }
@@ -122,42 +136,71 @@ export default function RequestPage() {
     <main className="min-h-screen bg-rr-radial text-white">
       <PrototypeNav />
       <section className="mx-auto max-w-6xl px-6 py-12">
-        <div className="text-xs uppercase tracking-[0.42em] text-rr-purple">Passenger flow</div>
-        <h1 className="rr-metal-text mt-3 text-5xl font-black">Request a scheduled ride</h1>
-        <p className="mt-4 max-w-3xl text-rr-chrome">Choose pickup and drop-off points, choose a motorcycle model, select an approved rider matched to that bike, sign the release, and submit the request.</p>
+        <div className="text-xs uppercase tracking-[0.42em] text-rr-purple">Passenger reservation</div>
+        <h1 className="rr-metal-text mt-3 text-5xl font-black">Reserve a scheduled ride</h1>
+        <p className="mt-4 max-w-3xl text-rr-chrome">The reservation flow now steps passengers through one decision at a time: who is riding, where they are going, what bike they want, who will operate it, when it happens, and the required waiver.</p>
 
+        <div className="mt-8"><ProcessStepper steps={passengerReservationSteps} currentStep={reservationStep} label="Ride reservation flow" /></div>
         {error ? <div className="mt-6 rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-red-100">{error}</div> : null}
 
         <form onSubmit={submitRequest} className="mt-8 grid gap-8 lg:grid-cols-[1fr_0.9fr]">
-          <div className="rr-card grid gap-6 rounded-[2rem] p-8">
-            <div className="grid gap-5 md:grid-cols-2"><label className={labelClass}>Passenger legal name<input name="passengerName" required className={inputClass} placeholder="Full legal name" /></label><label className={labelClass}>Date of birth<input type="date" name="dateOfBirth" required className={inputClass} /></label><label className={labelClass}>Phone<input name="phone" required className={inputClass} placeholder="Phone number" /></label><label className={labelClass}>Emergency contact<input name="emergencyContact" required className={inputClass} placeholder="Name and phone" /></label></div>
+          <div className="rr-card rounded-[2rem] p-8">
+            <div className={reservationStep === 0 ? "grid gap-6" : "hidden"}>
+              <h2 className="text-2xl font-black">Passenger details</h2>
+              <div className="grid gap-5 md:grid-cols-2"><label className={labelClass}>Passenger legal name<input name="passengerName" required className={inputClass} placeholder="Full legal name" /></label><label className={labelClass}>Date of birth<input type="date" name="dateOfBirth" required className={inputClass} /></label><label className={labelClass}>Phone<input name="phone" required className={inputClass} placeholder="Phone number" /></label><label className={labelClass}>Emergency contact<input name="emergencyContact" required className={inputClass} placeholder="Name and phone" /></label></div>
+              <StepControls step={reservationStep} setStep={setReservationStep} />
+            </div>
 
-            <section className="rounded-[1.5rem] border border-rr-purple/30 bg-rr-purple/5 p-5"><div className="text-xs uppercase tracking-[0.32em] text-rr-purple">Route request</div><h2 className="mt-2 text-2xl font-black">Pickup and drop-off</h2><p className="mt-2 text-sm leading-6 text-rr-chrome">Production will use Mapbox/Google Maps autocomplete and routing. This prototype saves typed locations and shows a mock route layer.</p><div className="mt-5 grid gap-5 md:grid-cols-2"><label className={labelClass}>Pickup location<input name="pickupLocation" required className={inputClass} defaultValue={pickupPreview} onChange={(event) => setPickupPreview(event.currentTarget.value)} /></label><label className={labelClass}>Drop-off location<input name="dropoffLocation" required className={inputClass} defaultValue={dropoffPreview} onChange={(event) => setDropoffPreview(event.currentTarget.value)} /></label></div><div className="mt-5 grid gap-5 md:grid-cols-2"><label className={labelClass}>Route preference<select name="routePreference" required className={inputClass}><option>Scenic / relaxed route</option><option>Fastest safe route</option><option>Avoid highways</option><option>Coastal / water views if possible</option><option>Rider recommendation</option></select></label><label className={labelClass}>Rider notes<input name="riderNotes" className={inputClass} placeholder="Gate code, parking, passenger comfort needs..." /></label></div></section>
+            <div className={reservationStep === 1 ? "grid gap-6" : "hidden"}>
+              <h2 className="text-2xl font-black">Pickup and drop-off</h2>
+              <p className="text-sm leading-6 text-rr-chrome">Production will use Mapbox/Google Maps autocomplete and routing. This prototype saves typed locations and shows a mock route layer.</p>
+              <div className="grid gap-5 md:grid-cols-2"><label className={labelClass}>Pickup location<input name="pickupLocation" required className={inputClass} defaultValue={pickupPreview} onChange={(event) => setPickupPreview(event.currentTarget.value)} /></label><label className={labelClass}>Drop-off location<input name="dropoffLocation" required className={inputClass} defaultValue={dropoffPreview} onChange={(event) => setDropoffPreview(event.currentTarget.value)} /></label></div>
+              <div className="grid gap-5 md:grid-cols-2"><label className={labelClass}>Route preference<select name="routePreference" required className={inputClass}><option>Scenic / relaxed route</option><option>Fastest safe route</option><option>Avoid highways</option><option>Coastal / water views if possible</option><option>Rider recommendation</option></select></label><label className={labelClass}>Rider notes<input name="riderNotes" className={inputClass} placeholder="Gate code, parking, passenger comfort needs..." /></label></div>
+              <StepControls step={reservationStep} setStep={setReservationStep} />
+            </div>
 
-            <section className="rounded-[1.5rem] border border-white/10 bg-black/20 p-5"><div className="text-xs uppercase tracking-[0.32em] text-rr-purple">Step 1</div><h2 className="mt-2 text-2xl font-black">Choose a motorcycle</h2><p className="mt-2 text-sm leading-6 text-rr-chrome">A rider only appears in the next step if Admin approved them for the bike model selected here.</p><input type="hidden" name="selectedBikeId" value={selectedBikeId} /><div className="mt-5 grid gap-4">{motorcycleInventory.map((bike) => { const checked = selectedBikeId === bike.id; return <button key={bike.id} type="button" onClick={() => chooseBike(bike.id)} className={`rounded-3xl border p-0 text-left transition ${checked ? "border-rr-purple bg-rr-purple/10 shadow-glow" : "border-white/10 bg-black/20 hover:border-rr-purple/50"}`}><div className={`h-28 rounded-t-3xl bg-gradient-to-br ${bike.visualTheme}`} /><div className="p-5"><div className="text-xs uppercase tracking-[0.28em] text-rr-purple">{bike.category}</div><h3 className="mt-2 text-xl font-black">{bike.year} {bike.make} {bike.model}</h3><p className="mt-2 text-sm text-rr-chrome">{bike.passengerFit}</p><div className="mt-3 flex flex-wrap gap-2 text-xs text-rr-silver">{bike.comfortTags.map((tag) => <span key={tag} className="rounded-full border border-white/10 px-3 py-1">{tag}</span>)}</div></div></button>; })}</div></section>
+            <div className={reservationStep === 2 ? "grid gap-6" : "hidden"}>
+              <h2 className="text-2xl font-black">Choose a motorcycle</h2>
+              <p className="text-sm leading-6 text-rr-chrome">A rider only appears in the next step if Admin approved them for the bike model selected here.</p>
+              <input type="hidden" name="selectedBikeId" value={selectedBikeId} />
+              <div className="grid gap-4">{motorcycleInventory.map((bike) => { const checked = selectedBikeId === bike.id; return <button key={bike.id} type="button" onClick={() => setSelectedBikeId(bike.id)} className={`rounded-3xl border p-0 text-left transition ${checked ? "border-rr-purple bg-rr-purple/10 shadow-glow" : "border-white/10 bg-black/20 hover:border-rr-purple/50"}`}><div className={`h-28 rounded-t-3xl bg-gradient-to-br ${bike.visualTheme}`} /><div className="p-5"><div className="text-xs uppercase tracking-[0.28em] text-rr-purple">{bike.category}</div><h3 className="mt-2 text-xl font-black">{bike.year} {bike.make} {bike.model}</h3><p className="mt-2 text-sm text-rr-chrome">{bike.passengerFit}</p><div className="mt-3 flex flex-wrap gap-2 text-xs text-rr-silver">{bike.comfortTags.map((tag) => <span key={tag} className="rounded-full border border-white/10 px-3 py-1">{tag}</span>)}</div></div></button>; })}</div>
+              <StepControls step={reservationStep} setStep={setReservationStep} />
+            </div>
 
-            <section className="rounded-[1.5rem] border border-white/10 bg-black/20 p-5">
-              <div className="text-xs uppercase tracking-[0.32em] text-rr-purple">Step 2</div>
-              <h2 className="mt-2 text-2xl font-black">Choose an approved rider</h2>
-              <p className="mt-2 text-sm leading-6 text-rr-chrome">Only active riders approved for the selected {selectedBike.make} {selectedBike.model} are shown.</p>
+            <div className={reservationStep === 3 ? "grid gap-6" : "hidden"}>
+              <h2 className="text-2xl font-black">Choose an approved rider</h2>
+              <p className="text-sm leading-6 text-rr-chrome">Only active riders approved for the selected {selectedBike.make} {selectedBike.model} are shown.</p>
               <input type="hidden" name="selectedRiderId" value={selectedRiderId} />
-              <div className="mt-5 grid gap-4">
+              <div className="grid gap-4">
                 {matchedRiders.length === 0 ? <div className="rounded-3xl border border-yellow-500/30 bg-yellow-500/10 p-5 text-sm text-yellow-100">No approved active riders for this bike yet. Approve a rider from Admin, make sure their garage inventory model matches this bike, then refresh this page.</div> : null}
-                {matchedRiders.map((rider) => {
-                  const checked = selectedRiderId === rider.id;
-                  const bikeImage = rider.bikePhotoUrls?.[0]?.url;
-                  return <button key={rider.id} type="button" onClick={() => setSelectedRiderId(rider.id)} className={`overflow-hidden rounded-3xl border text-left transition ${checked ? "border-rr-purple bg-rr-purple/10 shadow-glow" : "border-white/10 bg-black/20 hover:border-rr-purple/50"}`}>{bikeImage ? <img src={bikeImage} alt={`${rider.name} bike`} className="h-44 w-full object-cover" /> : <div className="h-20 bg-gradient-to-br from-rr-purple/30 via-zinc-900 to-black" />}<div className="p-5"><div className="flex gap-4"><RiderAvatar rider={rider} /><div><div className="text-xs uppercase tracking-[0.25em] text-rr-purple">{rider.source === "approved-application" ? "New approved rider" : rider.status} · {rider.rating} stars · {rider.completedRides} rides</div><h3 className="mt-2 text-2xl font-black">{rider.name}</h3><p className="mt-1 text-sm text-rr-chrome">{rider.ownedBikeName || `${selectedBike.make} ${selectedBike.model}`}</p></div></div><p className="mt-4 text-sm text-rr-silver">{rider.bio}</p></div></button>;
-                })}
+                {matchedRiders.map((rider) => { const checked = selectedRiderId === rider.id; const bikeImage = rider.bikePhotoUrls?.[0]?.url; return <button key={rider.id} type="button" onClick={() => setSelectedRiderId(rider.id)} className={`overflow-hidden rounded-3xl border text-left transition ${checked ? "border-rr-purple bg-rr-purple/10 shadow-glow" : "border-white/10 bg-black/20 hover:border-rr-purple/50"}`}>{bikeImage ? <img src={bikeImage} alt={`${rider.name} bike`} className="h-44 w-full object-cover" /> : <div className="h-20 bg-gradient-to-br from-rr-purple/30 via-zinc-900 to-black" />}<div className="p-5"><div className="flex gap-4"><RiderAvatar rider={rider} /><div><div className="text-xs uppercase tracking-[0.25em] text-rr-purple">{rider.source === "approved-application" ? "New approved rider" : rider.status} · {rider.rating} stars · {rider.completedRides} rides</div><h3 className="mt-2 text-2xl font-black">{rider.name}</h3><p className="mt-1 text-sm text-rr-chrome">{rider.ownedBikeName || `${selectedBike.make} ${selectedBike.model}`}</p></div></div><p className="mt-4 text-sm text-rr-silver">{rider.bio}</p></div></button>; })}
               </div>
-            </section>
+              <StepControls step={reservationStep} setStep={setReservationStep} />
+            </div>
 
-            <div className="grid gap-5 md:grid-cols-2"><label className={labelClass}>Experience<select name="experience" required className={inputClass}>{experiences.map((item) => <option key={item.id}>{item.title}</option>)}</select></label><div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-rr-silver"><strong className="text-white">Selected bike:</strong><br />{selectedBike.year} {selectedBike.make} {selectedBike.model}</div></div>
-            <div className="grid gap-5 md:grid-cols-3"><label className={labelClass}>Date<input type="date" name="date" required className={inputClass} /></label><label className={labelClass}>Time<input type="time" name="time" required className={inputClass} /></label><label className={labelClass}>Duration<select name="duration" required className={inputClass}><option>90 minutes</option><option>2 hours</option><option>3 hours</option></select></label></div>
+            <div className={reservationStep === 4 ? "grid gap-6" : "hidden"}>
+              <h2 className="text-2xl font-black">Schedule and experience</h2>
+              <div className="grid gap-5 md:grid-cols-2"><label className={labelClass}>Experience<select name="experience" required className={inputClass}>{experiences.map((item) => <option key={item.id}>{item.title}</option>)}</select></label><div className="rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-rr-silver"><strong className="text-white">Selected bike:</strong><br />{selectedBike.year} {selectedBike.make} {selectedBike.model}<br /><strong className="text-white">Selected rider:</strong><br />{selectedRider?.name || "No rider selected yet"}</div></div>
+              <div className="grid gap-5 md:grid-cols-3"><label className={labelClass}>Date<input type="date" name="date" required className={inputClass} /></label><label className={labelClass}>Time<input type="time" name="time" required className={inputClass} /></label><label className={labelClass}>Duration<select name="duration" required className={inputClass}><option>90 minutes</option><option>2 hours</option><option>3 hours</option></select></label></div>
+              <StepControls step={reservationStep} setStep={setReservationStep} />
+            </div>
 
-            <section className="rounded-[1.5rem] border border-rr-purple/30 bg-rr-purple/5 p-6"><div className="text-xs uppercase tracking-[0.32em] text-rr-purple">Legal release template</div><h2 className="mt-2 text-2xl font-black">Passenger release, waiver, and safety agreement</h2><p className="mt-3 text-sm leading-6 text-rr-chrome">Prototype legal language: I understand that riding as a passenger on a motorcycle involves inherent risks, including serious injury, death, property damage, weather exposure, road hazards, actions of other drivers, mechanical issues, and other known or unknown risks. I voluntarily choose to participate in the requested motorcycle experience.</p><p className="mt-3 text-sm leading-6 text-rr-chrome">I agree to follow all rider and Ride Relax safety instructions. I understand that a helmet is required, closed-toe shoes are required, long pants are strongly recommended, and the rider or administrator may cancel or refuse the ride for safety concerns. I agree not to participate while impaired by alcohol, drugs, medication, exhaustion, or any condition that would make riding unsafe.</p><div className="mt-5 grid gap-3"><label className={checkboxLabelClass}><input type="checkbox" name="emergencyContactConfirmed" className="mt-1" />I confirm my emergency contact information is accurate.</label><label className={checkboxLabelClass}><input type="checkbox" name="helmetAcknowledged" className="mt-1" />I understand a helmet is required and the rider may refuse the ride if I do not meet safety requirements.</label><label className={checkboxLabelClass}><input type="checkbox" name="soberAcknowledged" className="mt-1" />I agree not to ride while impaired by alcohol, drugs, medication, or any unsafe condition.</label><label className={checkboxLabelClass}><input type="checkbox" name="riskAcknowledged" className="mt-1" />I understand motorcycle riding has inherent risk, including serious injury or death, and I voluntarily request this experience.</label><label className={checkboxLabelClass}><input type="checkbox" name="medicalAcknowledged" className="mt-1" />I confirm I am physically able to participate and will disclose any relevant medical or mobility concerns.</label><label className={checkboxLabelClass}><input type="checkbox" name="conductAcknowledged" className="mt-1" />I agree to follow rider instructions and understand unsafe conduct may end the ride without approval to continue.</label></div><div className="mt-5 grid gap-5 md:grid-cols-2"><label className={labelClass}>Photo/video consent<select name="mediaConsent" required className={inputClass}><option>No, do not use my image for marketing</option><option>Yes, Ride Relax may use ride photos/video for marketing</option></select></label><label className={labelClass}>Initials<input name="initials" required maxLength={5} className={inputClass} placeholder="RM" /></label></div><label className={`${labelClass} mt-5 block`}>Electronic signature — type passenger legal name exactly<input name="electronicSignature" required className={inputClass} placeholder="Full legal name" /></label></section>
+            <div className={reservationStep === 5 ? "grid gap-6" : "hidden"}>
+              <h2 className="text-2xl font-black">Passenger release, waiver, and safety agreement</h2>
+              <p className="text-sm leading-6 text-rr-chrome">Prototype legal language: I understand that riding as a passenger on a motorcycle involves inherent risks, including serious injury, death, property damage, weather exposure, road hazards, actions of other drivers, mechanical issues, and other known or unknown risks. I voluntarily choose to participate in the requested motorcycle experience.</p>
+              <p className="text-sm leading-6 text-rr-chrome">I agree to follow all rider and Ride Relax safety instructions. Helmet required. Closed-toe shoes required. Long pants strongly recommended. No intoxication. Rider or administrator may refuse or cancel the ride for safety concerns.</p>
+              <div className="grid gap-3"><label className={checkboxLabelClass}><input type="checkbox" name="emergencyContactConfirmed" className="mt-1" />I confirm my emergency contact information is accurate.</label><label className={checkboxLabelClass}><input type="checkbox" name="helmetAcknowledged" className="mt-1" />I understand a helmet is required and the rider may refuse the ride if I do not meet safety requirements.</label><label className={checkboxLabelClass}><input type="checkbox" name="soberAcknowledged" className="mt-1" />I agree not to ride while impaired by alcohol, drugs, medication, or any unsafe condition.</label><label className={checkboxLabelClass}><input type="checkbox" name="riskAcknowledged" className="mt-1" />I understand motorcycle riding has inherent risk, including serious injury or death, and I voluntarily request this experience.</label><label className={checkboxLabelClass}><input type="checkbox" name="medicalAcknowledged" className="mt-1" />I confirm I am physically able to participate and will disclose relevant medical or mobility concerns.</label><label className={checkboxLabelClass}><input type="checkbox" name="conductAcknowledged" className="mt-1" />I agree to follow rider instructions and understand unsafe conduct may end the ride.</label></div>
+              <div className="grid gap-5 md:grid-cols-2"><label className={labelClass}>Photo/video consent<select name="mediaConsent" required className={inputClass}><option>No, do not use my image for marketing</option><option>Yes, Ride Relax may use ride photos/video for marketing</option></select></label><label className={labelClass}>Initials<input name="initials" required maxLength={5} className={inputClass} placeholder="RM" /></label></div>
+              <label className={labelClass}>Electronic signature — type passenger legal name exactly<input name="electronicSignature" required className={inputClass} placeholder="Full legal name" /></label>
+              <label className="flex gap-3 rounded-2xl border border-white/10 bg-black/30 p-5 text-sm text-rr-silver"><input type="checkbox" name="safetyAccepted" className="mt-1" />I understand and accept these requirements.</label>
+              <StepControls step={reservationStep} setStep={setReservationStep} />
+            </div>
 
-            <div className="rounded-2xl border border-white/10 bg-black/30 p-5"><div className="font-semibold text-white">Final safety acknowledgment</div><p className="mt-2 text-sm leading-6 text-rr-chrome">Motorcycles involve inherent risk. Helmet required. Closed-toe shoes required. Long pants strongly recommended. No intoxication. Rider may refuse ride for safety.</p><label className="mt-4 flex gap-3 text-sm text-rr-silver"><input type="checkbox" name="safetyAccepted" className="mt-1" />I understand and accept these requirements.</label></div>
-            <div className="flex flex-wrap gap-3"><button className="rounded-full bg-rr-purple px-6 py-3 font-semibold shadow-glow">Submit ride request to selected rider</button><Link href="/admin" className="rounded-full border border-white/10 px-6 py-3 text-rr-silver">Open admin</Link></div>
+            <div className={reservationStep === 6 ? "grid gap-6" : "hidden"}>
+              <h2 className="text-2xl font-black">Review and submit</h2>
+              <div className="rounded-2xl border border-white/10 bg-black/30 p-5 text-sm leading-6 text-rr-silver"><strong className="text-white">Selected route:</strong><br />{pickupPreview} → {dropoffPreview}<br /><strong className="text-white">Motorcycle:</strong><br />{selectedBike.year} {selectedBike.make} {selectedBike.model}<br /><strong className="text-white">Rider:</strong><br />{selectedRider?.name || "No rider selected"}</div>
+              <StepControls step={reservationStep} setStep={setReservationStep} />
+            </div>
           </div>
 
           <aside className="space-y-5 lg:sticky lg:top-6 lg:self-start">
