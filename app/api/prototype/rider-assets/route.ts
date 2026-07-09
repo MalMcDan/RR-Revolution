@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
-import { createSupabaseAdminClient } from "../../../../../lib/supabase/admin";
-import { env } from "../../../../../lib/env";
+import { createSupabaseAdminClient } from "../../../../lib/supabase/admin";
 
 function safeFileName(fileName: string) {
   return fileName.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function getRequiredBucket(name: string, fallback: string) {
+  return process.env[name] || fallback;
 }
 
 async function uploadPublicFile(bucket: string, file: File, folder: string) {
@@ -25,16 +28,18 @@ async function uploadPublicFile(bucket: string, file: File, folder: string) {
 
 export async function POST(request: Request) {
   try {
+    const riderPhotosBucket = getRequiredBucket("NEXT_PUBLIC_RIDER_PHOTOS_BUCKET", "rr-rider-photos");
+    const motorcyclePhotosBucket = getRequiredBucket("NEXT_PUBLIC_MOTORCYCLE_PHOTOS_BUCKET", "rr-motorcycle-photos");
     const form = await request.formData();
     const riderKey = safeFileName(String(form.get("riderKey") || "rider")) || "rider";
     const profileFile = form.get("profilePhoto");
     const bikeFiles = form.getAll("bikePhotos").filter((file): file is File => file instanceof File && Boolean(file.name));
 
     const profilePhoto = profileFile instanceof File && profileFile.name
-      ? await uploadPublicFile(env.riderPhotosBucket, profileFile, riderKey)
+      ? await uploadPublicFile(riderPhotosBucket, profileFile, riderKey)
       : null;
 
-    const bikePhotos = await Promise.all(bikeFiles.map((file) => uploadPublicFile(env.motorcyclePhotosBucket, file, riderKey)));
+    const bikePhotos = await Promise.all(bikeFiles.map((file) => uploadPublicFile(motorcyclePhotosBucket, file, riderKey)));
 
     return NextResponse.json({ profilePhoto, bikePhotos });
   } catch (error) {
