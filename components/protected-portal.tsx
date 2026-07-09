@@ -4,6 +4,7 @@ import { useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { getRoleDashboard, readClerkAppRole, roleMatches, setPortalIntent, type PortalRole } from "../lib/prototype-portal";
+import { getStoredApprovedRiders } from "../lib/prototype-rider-marketplace";
 
 type ProtectedPortalProps = {
   requiredRole: PortalRole;
@@ -12,6 +13,16 @@ type ProtectedPortalProps = {
   description?: string;
   allowPrototypeFallback?: boolean;
 };
+
+function riderIsApprovedForPrototype(email?: string | null, name?: string | null) {
+  const riders = getStoredApprovedRiders();
+  return riders.some((rider) => {
+    const active = rider.status === "Approved" && rider.accessStatus === "Active";
+    const emailMatches = email && rider.email?.toLowerCase() === email.toLowerCase();
+    const nameMatches = name && rider.name?.toLowerCase() === name.toLowerCase();
+    return active && Boolean(emailMatches || nameMatches);
+  });
+}
 
 export function ProtectedPortal({
   requiredRole,
@@ -22,11 +33,11 @@ export function ProtectedPortal({
 }: ProtectedPortalProps) {
   const { isLoaded, isSignedIn, user } = useUser();
   const clerkRole = readClerkAppRole(user?.publicMetadata as Record<string, unknown> | undefined);
-  const allowed = isLoaded && isSignedIn && roleMatches(requiredRole, clerkRole, allowPrototypeFallback);
+  const baseAllowed = isLoaded && isSignedIn && roleMatches(requiredRole, clerkRole, allowPrototypeFallback);
+  const riderApproved = requiredRole !== "rider" || riderIsApprovedForPrototype(user?.primaryEmailAddress?.emailAddress, user?.fullName || user?.primaryEmailAddress?.emailAddress);
+  const allowed = baseAllowed && riderApproved;
 
-  if (!isLoaded) {
-    return <main className="min-h-screen bg-rr-radial p-10 text-white">Checking portal access...</main>;
-  }
+  if (!isLoaded) return <main className="min-h-screen bg-rr-radial p-10 text-white">Checking portal access...</main>;
 
   if (!isSignedIn) {
     const loginPath = requiredRole === "passenger" ? "/user-login" : requiredRole === "rider" ? "/rider-login" : "/admin-login";
@@ -37,6 +48,22 @@ export function ProtectedPortal({
           <h1 className="rr-metal-text mt-3 text-5xl font-black">{title}</h1>
           <p className="mt-4 text-rr-chrome">Please sign in through the correct Ride Relax portal before continuing.</p>
           <Link href={loginPath} onClick={() => setPortalIntent(requiredRole)} className="mt-8 inline-flex rounded-full bg-rr-purple px-6 py-3 font-semibold shadow-glow">Go to {requiredRole} login</Link>
+        </section>
+      </main>
+    );
+  }
+
+  if (baseAllowed && !riderApproved) {
+    return (
+      <main className="min-h-screen bg-rr-radial text-white">
+        <section className="mx-auto max-w-3xl px-6 py-16">
+          <div className="text-xs uppercase tracking-[0.42em] text-yellow-300">Rider approval required</div>
+          <h1 className="rr-metal-text mt-3 text-5xl font-black">Rider portal locked</h1>
+          <p className="mt-4 text-rr-chrome">This account can sign in as a rider, but Admin has not approved and published this rider yet. Rider dashboard access stays locked until onboarding, documents, contract, background check, license monitoring, and admin approval are complete.</p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Link href="/rider-application" className="rounded-full bg-rr-purple px-6 py-3 font-semibold shadow-glow">Start rider onboarding</Link>
+            <Link href="/rider-login" className="rounded-full border border-white/10 px-6 py-3 text-rr-silver">Back to rider login</Link>
+          </div>
         </section>
       </main>
     );
